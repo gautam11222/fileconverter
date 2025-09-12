@@ -1,0 +1,48 @@
+Build me a professional online File Converter web application that supports 50+ different file conversions across documents, images, audio, video, and archives. 
+
+✅ Features:
+- Support at least 50+ conversions, including:
+   - Documents: PDF ⇄ Word, PDF ⇄ Excel, PDF ⇄ PPT, PDF ⇄ TXT, Word ⇄ TXT, Excel ⇄ CSV, PPT ⇄ Images.
+   - Images: JPG ⇄ PNG, JPG ⇄ WEBP, PNG ⇄ PDF, GIF ⇄ MP4, SVG ⇄ PNG, BMP ⇄ JPG, HEIC ⇄ JPG.
+   - Audio: MP3 ⇄ WAV, MP3 ⇄ AAC, FLAC ⇄ MP3, OGG ⇄ MP3, M4A ⇄ MP3, Audio to Text.
+   - Video: MP4 ⇄ AVI, MP4 ⇄ MOV, MP4 ⇄ MKV, MP4 ⇄ WEBM, MP4 ⇄ GIF, Extract MP3 from MP4, Compress MP4.
+   - Archives: ZIP ⇄ RAR, ZIP ⇄ 7Z, TAR ⇄ ZIP, ISO ⇄ ZIP, File compression.
+   - eBooks: EPUB ⇄ PDF, MOBI ⇄ PDF, AZW3 ⇄ EPUB.
+   - Others: Image to Text (OCR), Speech to Text, Text to Speech.
+- Allow multiple files conversion at once.
+- Show file preview where possible (images, videos, PDFs).
+- Progress bar + status for larger files.
+- Temporary storage with auto-delete after download.
+
+✅ Frontend:
+- Modern, responsive, mobile-first design.
+- Drag & Drop upload + file select option.
+- Tabs or categories: "Document Converter", "Image Converter", "Audio Converter", "Video Converter", "Archive Converter", "Other Tools".
+- Dark & Light mode.
+- Space for ads (header, sidebar, footer).
+- Multi-language support.
+
+✅ SEO Optimization:
+- Separate SEO-friendly pages for each converter tool (e.g., /pdf-to-word, /jpg-to-png, /mp4-to-mp3).
+- Meta title, description, keywords, and OpenGraph tags for each tool.
+- Fast loading, lightweight code, mobile optimized.
+- Homepage with H1: "Free Online File Converter – Convert PDF, Images, Audio, Video, Documents (50+ Tools)".
+- FAQ section with structured data (JSON-LD).
+- Blog-style text for each conversion page to improve ranking.
+
+✅ Google AdSense Approval:
+- Professional UI/UX, safe for all audiences.
+- Include Privacy Policy, Terms of Service, About Us, Contact Us pages.
+- Ads should not overlap or mislead users.
+- Clear separation between ads and download buttons.
+
+✅ Extra Features:
+- Cloud upload/import from Google Drive, Dropbox, OneDrive.
+- Option to email converted files.
+- Bulk conversion support.
+- Recent conversion history (session based).
+- File compression & resizing (for images and videos).
+- Secure HTTPS with user privacy protection.
+- Analytics integration (Google Analytics).
+
+Do not lock to one technology; choose the best modern stack automatically for performance, scalability, and SEO.
