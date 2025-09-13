@@ -18,7 +18,7 @@ import { FileUploadZone } from '@/components/converter/file-upload-zone';
 import { FilePreview } from '@/components/converter/file-preview';
 import { ConversionProgress } from '@/components/converter/conversion-progress';
 import { DownloadArea } from '@/components/converter/download-area';
-import { AdBanner } from '@/components/common/ad-banner';
+import AdBanner from '@/components/common/ad-banner';  // ✅ updated import (default export)
 import { RecentConversions } from '@/components/common/recent-conversions';
 import { FeaturesSection } from '@/components/common/features-section';
 import { FAQSection } from '@/components/common/faq-section';
@@ -62,7 +62,13 @@ export default function Home() {
           {/* Sidebar */}
           <div className="lg:col-span-1 order-2 lg:order-1">
             <div className="sticky top-32 space-y-6">
-              <AdBanner size="300x250" label="Sidebar Ad" data-testid="ad-sidebar" />
+              {/* ✅ Sidebar AdSense block */}
+              <AdBanner
+                slot="1234567890"
+                format="auto"
+                className="block w-full"
+                data-testid="ad-sidebar"
+              />
               <RecentConversions />
             </div>
           </div>
@@ -212,9 +218,14 @@ export default function Home() {
             {/* Features Section */}
             <FeaturesSection />
 
-            {/* Middle Ad Banner */}
+            {/* ✅ Middle AdSense block */}
             <div className="my-8">
-              <AdBanner size="728x90" label="Content Ad Space" data-testid="ad-content" />
+              <AdBanner
+                slot="9876543210"
+                format="auto"
+                className="block w-full"
+                data-testid="ad-content"
+              />
             </div>
 
             {/* FAQ Section */}

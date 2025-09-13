@@ -1,30 +1,36 @@
+import { useEffect } from "react";
+
 interface AdBannerProps {
-  size: '728x90' | '300x250' | '320x100';
-  label: string;
-  className?: string;
+  slot: string;              // AdSense slot ID (from your AdSense dashboard)
+  format?: string;           // Format type (e.g. "auto", "rectangle", etc.)
+  className?: string;        // Extra Tailwind / CSS classes
 }
 
-export function AdBanner({ size, label, className = '', ...props }: AdBannerProps) {
-  const getSizeClasses = (size: string) => {
-    switch (size) {
-      case '728x90':
-        return 'h-[90px]';
-      case '300x250':
-        return 'h-[250px]';
-      case '320x100':
-        return 'h-[100px]';
-      default:
-        return 'h-24';
+export default function AdBanner({
+  slot,
+  format = "auto",
+  className = "",
+}: AdBannerProps) {
+  useEffect(() => {
+    try {
+      // Load the AdSense ad
+      // @ts-ignore
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+    } catch (err) {
+      console.error("AdSense error:", err);
     }
-  };
+  }, []);
 
   return (
-    <div 
-      className={`ad-banner ${getSizeClasses(size)} ${className}`}
-      {...props}
-    >
-      <div className="text-xs">Advertisement</div>
-      <div className="text-sm mt-1">{size} {label}</div>
+    <div className={`ad-container my-4 flex justify-center ${className}`}>
+      <ins
+        className="adsbygoogle"
+        style={{ display: "block" }}
+        data-ad-client="ca-pub-7283553771090751"   // ✅ your publisher ID
+        data-ad-slot={slot}                        // ✅ ad slot ID
+        data-ad-format={format}
+        data-full-width-responsive="true"
+      ></ins>
     </div>
   );
 }

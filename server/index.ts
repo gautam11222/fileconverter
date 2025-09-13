@@ -44,6 +44,13 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 // ------------------------
+// Health Check Endpoint
+// ------------------------
+app.get("/healthz", (_req: Request, res: Response) => {
+  res.status(200).send("OK");
+});
+
+// ------------------------
 // Main Async Function
 // ------------------------
 
