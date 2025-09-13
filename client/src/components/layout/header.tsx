@@ -11,7 +11,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useTheme } from '@/hooks/use-theme';
 import { Menu, ArrowRightLeft, Sun, Moon } from 'lucide-react';
-import { AdBanner } from '@/components/common/ad-banner';
+import AdBanner from '@/components/common/ad-banner'; // ✅ Correct default import
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
@@ -30,32 +30,16 @@ export function Header() {
           
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-6">
-            <Link 
-              href="/" 
-              className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
-              data-testid="link-home-nav"
-            >
+            <Link href="/" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors" data-testid="link-home-nav">
               Home
             </Link>
-            <Link 
-              href="/tools" 
-              className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
-              data-testid="link-tools"
-            >
+            <Link href="/tools" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors" data-testid="link-tools">
               Tools
             </Link>
-            <Link 
-              href="/about" 
-              className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
-              data-testid="link-about"
-            >
+            <Link href="/about" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors" data-testid="link-about">
               About
             </Link>
-            <Link 
-              href="/contact" 
-              className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
-              data-testid="link-contact"
-            >
+            <Link href="/contact" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors" data-testid="link-contact">
               Contact
             </Link>
           </nav>
@@ -75,12 +59,7 @@ export function Header() {
             </Select>
             
             {/* Dark Mode Toggle */}
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={toggleTheme}
-              data-testid="button-theme-toggle"
-            >
+            <Button variant="ghost" size="icon" onClick={toggleTheme} data-testid="button-theme-toggle">
               {theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
             </Button>
             
@@ -93,32 +72,16 @@ export function Header() {
               </SheetTrigger>
               <SheetContent side="right" className="w-[300px]">
                 <nav className="flex flex-col space-y-4 mt-4">
-                  <Link 
-                    href="/" 
-                    className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
-                    data-testid="link-mobile-home"
-                  >
+                  <Link href="/" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors" data-testid="link-mobile-home">
                     Home
                   </Link>
-                  <Link 
-                    href="/tools" 
-                    className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
-                    data-testid="link-mobile-tools"
-                  >
+                  <Link href="/tools" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors" data-testid="link-mobile-tools">
                     Tools
                   </Link>
-                  <Link 
-                    href="/about" 
-                    className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
-                    data-testid="link-mobile-about"
-                  >
+                  <Link href="/about" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors" data-testid="link-mobile-about">
                     About
                   </Link>
-                  <Link 
-                    href="/contact" 
-                    className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
-                    data-testid="link-mobile-contact"
-                  >
+                  <Link href="/contact" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors" data-testid="link-mobile-contact">
                     Contact
                   </Link>
                 </nav>
@@ -130,7 +93,7 @@ export function Header() {
       
       {/* Top Ad Banner */}
       <div className="container mx-auto px-4 py-2">
-        <AdBanner size="728x90" label="Header Ad Space" data-testid="ad-header" />
+        <AdBanner slot="7289012345" format="auto" className="block w-full" data-testid="ad-header" />
       </div>
     </header>
   );
