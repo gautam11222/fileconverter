@@ -91,10 +91,10 @@ export function Header() {
         </div>
       </div>
       
-      {/* Top Ad Banner */}
-      <div className="container mx-auto px-4 py-2">
-        <AdBanner slot="7289012345" format="auto" className="block w-full" data-testid="ad-header" />
-      </div>
+      {/* Top Ad Banner - DISABLED: Replace with real slot ID */}
+      {/* <div className="container mx-auto px-4 py-2">
+        <AdBanner slot="REPLACE_WITH_REAL_SLOT_ID" format="auto" className="block w-full" data-testid="ad-header" />
+      </div> */}
     </header>
   );
 }

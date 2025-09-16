@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
+import { Head } from '@/components/ui/head';
 import { CategoryTabs } from '@/components/converter/category-tabs';
 import { ToolGrid } from '@/components/converter/tool-grid';
 import { FileUploadZone } from '@/components/converter/file-upload-zone';
@@ -55,6 +56,11 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background" data-testid="page-home">
+      <Head
+        title="Free Online File Converter - Convert PDF, Images, Audio, Video, Documents (50+ Tools)"
+        description="Convert files online for free. Support 50+ formats including PDF to Word, JPG to PNG, MP3 to WAV, MP4 to AVI. Fast, secure, no registration required."
+        keywords="file converter, PDF converter, image converter, audio converter, video converter, online converter, free converter, PDF to Word, JPG to PNG, MP4 to MP3"
+      />
       <Header />
       
       <main className="container mx-auto px-4 py-8">
@@ -62,13 +68,13 @@ export default function Home() {
           {/* Sidebar */}
           <div className="lg:col-span-1 order-2 lg:order-1">
             <div className="sticky top-32 space-y-6">
-              {/* ✅ Sidebar AdSense block */}
-              <AdBanner
-                slot="1234567890"
+              {/* ✅ Sidebar AdSense block - DISABLED: Replace with real slot ID */}
+              {/* <AdBanner
+                slot="REPLACE_WITH_REAL_SLOT_ID"
                 format="auto"
                 className="block w-full"
                 data-testid="ad-sidebar"
-              />
+              /> */}
               <RecentConversions />
             </div>
           </div>
@@ -218,14 +224,14 @@ export default function Home() {
             {/* Features Section */}
             <FeaturesSection />
 
-            {/* ✅ Middle AdSense block */}
+            {/* ✅ Middle AdSense block - DISABLED: Replace with real slot ID */}
             <div className="my-8">
-              <AdBanner
-                slot="9876543210"
+              {/* <AdBanner
+                slot="REPLACE_WITH_REAL_SLOT_ID"
                 format="auto"
                 className="block w-full"
                 data-testid="ad-content"
-              />
+              /> */}
             </div>
 
             {/* FAQ Section */}

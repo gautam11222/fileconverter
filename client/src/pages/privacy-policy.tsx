@@ -1,12 +1,16 @@
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
+import { Head } from '@/components/ui/head';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function PrivacyPolicy() {
   return (
     <div className="min-h-screen bg-background" data-testid="page-privacy-policy">
-      <title>Privacy Policy - Free Online File Converter</title>
-      <meta name="description" content="Our privacy policy explains how we collect, use, and protect your data when using our file conversion services." />
+      <Head
+        title="Privacy Policy - Free Online File Converter"
+        description="Our privacy policy explains how we collect, use, and protect your data when using our file conversion services."
+        keywords="privacy policy, data protection, file converter privacy, secure conversion, data collection"
+      />
       
       <Header />
       

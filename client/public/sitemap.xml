@@ -1,16 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="https://www.sitemaps.org/schemas/sitemap/0.9">
    <url>
-      <loc>https://flexiconvert.onrender.com/</loc>
-      <lastmod>2025-09-13</lastmod>
+      <loc>https://4555221c-4ab6-4642-bf67-189ac600d628-00-2t8khqm5yn2rh.kirk.replit.dev/</loc>
+      <lastmod>2025-01-16</lastmod>
       <changefreq>weekly</changefreq>
       <priority>1.0</priority>
    </url>
    <url>
-      <loc>https://flexiconvert.onrender.com/page1</loc>
-      <lastmod>2025-09-13</lastmod>
+      <loc>https://4555221c-4ab6-4642-bf67-189ac600d628-00-2t8khqm5yn2rh.kirk.replit.dev/about</loc>
+      <lastmod>2025-01-16</lastmod>
       <changefreq>monthly</changefreq>
       <priority>0.8</priority>
    </url>
-   <!-- Add more URLs as necessary -->
+   <url>
+      <loc>https://4555221c-4ab6-4642-bf67-189ac600d628-00-2t8khqm5yn2rh.kirk.replit.dev/contact</loc>
+      <lastmod>2025-01-16</lastmod>
+      <changefreq>monthly</changefreq>
+      <priority>0.7</priority>
+   </url>
+   <url>
+      <loc>https://4555221c-4ab6-4642-bf67-189ac600d628-00-2t8khqm5yn2rh.kirk.replit.dev/pdf-to-word</loc>
+      <lastmod>2025-01-16</lastmod>
+      <changefreq>monthly</changefreq>
+      <priority>0.9</priority>
+   </url>
+   <url>
+      <loc>https://4555221c-4ab6-4642-bf67-189ac600d628-00-2t8khqm5yn2rh.kirk.replit.dev/jpg-to-png</loc>
+      <lastmod>2025-01-16</lastmod>
+      <changefreq>monthly</changefreq>
+      <priority>0.9</priority>
+   </url>
+   <url>
+      <loc>https://4555221c-4ab6-4642-bf67-189ac600d628-00-2t8khqm5yn2rh.kirk.replit.dev/mp4-to-mp3</loc>
+      <lastmod>2025-01-16</lastmod>
+      <changefreq>monthly</changefreq>
+      <priority>0.9</priority>
+   </url>
 </urlset>

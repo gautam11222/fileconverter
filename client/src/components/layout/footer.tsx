@@ -6,10 +6,10 @@ export function Footer() {
   return (
     <footer className="bg-muted border-t border-border mt-16">
       <div className="container mx-auto px-4 py-12">
-        {/* Bottom Ad Banner */}
-        <div className="mb-8">
-          <AdBanner slot="7289012346" format="auto" className="block w-full" data-testid="ad-footer" />
-        </div>
+        {/* Bottom Ad Banner - DISABLED: Replace with real slot ID */}
+        {/* <div className="mb-8">
+          <AdBanner slot="REPLACE_WITH_REAL_SLOT_ID" format="auto" className="block w-full" data-testid="ad-footer" />
+        </div> */}
         
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           <div>

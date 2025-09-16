@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRoute } from 'wouter';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
+import { Head } from '@/components/ui/head';
 import { FileUploadZone } from '@/components/converter/file-upload-zone';
 import { FilePreview } from '@/components/converter/file-preview';
 import { ConversionProgress } from '@/components/converter/conversion-progress';
@@ -82,6 +83,11 @@ export default function Converter() {
 
   return (
     <div className="min-h-screen bg-background" data-testid={`page-converter-${tool.id}`}>
+      <Head
+        title={`${tool.name} Converter - Convert ${tool.fromFormat.toUpperCase()} to ${tool.toFormat.toUpperCase()} Online Free`}
+        description={`Convert ${tool.fromFormat.toUpperCase()} to ${tool.toFormat.toUpperCase()} online for free. ${tool.description} Fast, secure, no registration required.`}
+        keywords={`${tool.fromFormat} to ${tool.toFormat}, ${tool.fromFormat} converter, ${tool.toFormat} converter, convert ${tool.fromFormat}, online converter, free conversion`}
+      />
       <Header />
 
       <main className="container mx-auto px-4 py-8">
@@ -89,13 +95,13 @@ export default function Converter() {
           {/* Sidebar */}
           <div className="lg:col-span-1 order-2 lg:order-1">
             <div className="sticky top-32 space-y-6">
-              {/* ✅ Sidebar Ad */}
-              <AdBanner
-                slot="1234567890" // replace with your actual sidebar slot ID
+              {/* ✅ Sidebar Ad - DISABLED: Replace with real slot ID */}
+              {/* <AdBanner
+                slot="REPLACE_WITH_REAL_SLOT_ID"
                 format="auto"
                 className="block w-full"
                 data-testid="ad-sidebar"
-              />
+              /> */}
               <RecentConversions />
             </div>
           </div>
@@ -181,15 +187,15 @@ export default function Converter() {
             {/* Features Section */}
             <FeaturesSection />
 
-            {/* ✅ Middle Ad Banner */}
-            <div className="my-8">
+            {/* ✅ Middle Ad Banner - DISABLED: Replace with real slot ID */}
+            {/* <div className="my-8">
               <AdBanner
-                slot="9876543210" // replace with your actual content slot ID
+                slot="REPLACE_WITH_REAL_SLOT_ID"
                 format="auto"
                 className="block w-full"
                 data-testid="ad-content"
               />
-            </div>
+            </div> */}
 
             {/* FAQ Section */}
             <FAQSection />

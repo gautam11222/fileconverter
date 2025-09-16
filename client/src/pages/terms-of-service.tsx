@@ -1,12 +1,16 @@
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
+import { Head } from '@/components/ui/head';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function TermsOfService() {
   return (
     <div className="min-h-screen bg-background" data-testid="page-terms-of-service">
-      <title>Terms of Service - Free Online File Converter</title>
-      <meta name="description" content="Terms of service for using our free online file conversion platform. Please read these terms carefully before using our services." />
+      <Head
+        title="Terms of Service - Free Online File Converter"
+        description="Terms of service for using our free online file conversion platform. Please read these terms carefully before using our services."
+        keywords="terms of service, file converter terms, usage terms, conversion platform rules"
+      />
       
       <Header />
       

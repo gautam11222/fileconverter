@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
+import { Head } from '@/components/ui/head';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -70,8 +71,11 @@ export default function Contact() {
 
   return (
     <div className="min-h-screen bg-background" data-testid="page-contact">
-      <title>Contact Us - Free Online File Converter</title>
-      <meta name="description" content="Get in touch with our team for support, feedback, or business inquiries. We're here to help with all your file conversion needs." />
+      <Head
+        title="Contact Us - Free Online File Converter"
+        description="Get in touch with our team for support, feedback, or business inquiries. We're here to help with all your file conversion needs."
+        keywords="contact, support, help, feedback, file converter support, customer service"
+      />
       
       <Header />
       

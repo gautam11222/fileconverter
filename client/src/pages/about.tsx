@@ -1,13 +1,17 @@
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Head } from '@/components/ui/head';
 import { Shield, Zap, Users, Award } from 'lucide-react';
 
 export default function About() {
   return (
     <div className="min-h-screen bg-background" data-testid="page-about">
-      <title>About Us - Free Online File Converter</title>
-      <meta name="description" content="Learn about our mission to provide free, secure, and fast file conversion services. Trusted by millions of users worldwide." />
+      <Head 
+        title="About Us - Free Online File Converter"
+        description="Learn about our mission to provide free, secure, and fast file conversion services. Trusted by millions of users worldwide."
+        keywords="about, file converter, mission, secure conversion, free tools"
+      />
       
       <Header />
       
