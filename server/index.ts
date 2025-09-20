@@ -1,21 +1,24 @@
 import express, { Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
+import multer from "multer";
+import path from "path";
+import { FileConverterService } from "./file-converter.js";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
+const upload = multer({ dest: "uploads/" });
+const converter = new FileConverterService();
 
 // ------------------------
 // Middleware
 // ------------------------
 
-// Parse JSON and URL-encoded requests
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // Request logging middleware
 app.use((req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
-  const path = req.path;
+  const pathName = req.path;
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
   const originalResJson = res.json;
@@ -26,16 +29,14 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+    if (pathName.startsWith("/api")) {
+      let logLine = `${req.method} ${pathName} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
-
       if (logLine.length > 120) {
         logLine = logLine.slice(0, 119) + "…";
       }
-
       log(logLine);
     }
   });
@@ -51,14 +52,41 @@ app.get("/healthz", (_req: Request, res: Response) => {
 });
 
 // ------------------------
+// File Conversion Endpoint
+// ------------------------
+app.post("/api/convert", upload.single("file"), async (req: Request, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const inputPath = req.file.path;
+    const outputExt = req.query.to as string; // e.g. ?to=.docx
+
+    if (!outputExt) {
+      return res.status(400).json({ message: "Missing 'to' query param (e.g. ?to=.docx)" });
+    }
+
+    const outputPath = await converter.convertDocument(inputPath, outputExt);
+
+    res.download(outputPath, path.basename(outputPath), (err) => {
+      if (err) {
+        console.error("Download error:", err);
+        res.status(500).json({ message: "File download failed" });
+      }
+    });
+  } catch (err: any) {
+    console.error("Conversion failed:", err);
+    res.status(500).json({ message: err.message || "Conversion failed" });
+  }
+});
+
+// ------------------------
 // Main Async Function
 // ------------------------
 
 (async () => {
   try {
-    // Register API routes
-    await registerRoutes(app);
-
     // Error handling middleware
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
@@ -69,15 +97,13 @@ app.get("/healthz", (_req: Request, res: Response) => {
 
     // Setup Vite dev server or serve static files
     if (app.get("env") === "development") {
-      await setupVite(app); // Starts Vite dev server internally
+      await setupVite(app);
     } else {
-      serveStatic(app); // Serve production files from dist/public
+      serveStatic(app);
     }
 
-    // Port configuration
     const port = parseInt(process.env.PORT || "5000", 10);
 
-    // Start Express server
     app.listen(port, () => {
       log(`🚀 Server is running on http://localhost:${port} [${app.get("env")}]`);
     });
