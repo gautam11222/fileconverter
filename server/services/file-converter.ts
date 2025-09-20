@@ -29,26 +29,59 @@ export class FileConverterService {
   }
 
   // ---------------------- DOCUMENT CONVERSION ----------------------
-  async convertDocument(
-    inputPath: string,
-    outputExt: string
-  ): Promise<string> {
+  private getLibreOfficeFilter(ext: string): string {
+    switch (ext) {
+      case '.pdf':
+        return 'pdf:writer_pdf_Export';
+      case '.docx':
+        return 'docx:"MS Word 2007 XML"';
+      case '.doc':
+        return 'doc:"MS Word 97"';
+      case '.xlsx':
+        return 'xlsx:"Calc MS Excel 2007 XML"';
+      case '.pptx':
+        return 'pptx:"Impress MS PowerPoint 2007 XML"';
+      case '.odt':
+        return 'odt';
+      default:
+        return ext.replace('.', '');
+    }
+  }
+
+  async convertDocument(inputPath: string, outputExt: string): Promise<string> {
     const outputDir = path.dirname(inputPath);
     const outputPath = path.join(
       outputDir,
       path.basename(inputPath, path.extname(inputPath)) + outputExt
     );
 
-    // Run LibreOffice headless conversion
+    // Special case: PDF → DOCX needs a dedicated tool
+    if (path.extname(inputPath).toLowerCase() === '.pdf' && outputExt === '.docx') {
+      await this.convertPdfToDocx(inputPath, outputPath);
+      return outputPath;
+    }
+
+    const filter = this.getLibreOfficeFilter(outputExt);
+
     await execAsync(
-      `soffice --headless --convert-to ${outputExt.replace('.', '')} --outdir "${outputDir}" "${inputPath}"`
+      `soffice --headless --convert-to ${filter} --outdir "${outputDir}" "${inputPath}"`
     );
 
     if (!fs.existsSync(outputPath)) {
       throw new Error(`Document conversion failed: ${inputPath} → ${outputExt}`);
     }
-
     return outputPath;
+  }
+
+  private async convertPdfToDocx(inputPath: string, outputPath: string): Promise<void> {
+    // Requires Python + pdf2docx installed
+    // pip install pdf2docx
+    const cmd = `python3 -m pdf2docx.cli ${inputPath} ${outputPath}`;
+    try {
+      await execAsync(cmd);
+    } catch (err) {
+      throw new Error(`PDF→DOCX conversion failed. Ensure pdf2docx is installed. ${err}`);
+    }
   }
 
   // ---------------------- IMAGE CONVERSION ----------------------
