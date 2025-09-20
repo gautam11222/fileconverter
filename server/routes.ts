@@ -5,36 +5,31 @@ import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
 import { storage } from "./storage";
-import { exec } from "child_process";
-import util from "util";
-
-const execPromise = util.promisify(exec);
 
 // Configure multer for file uploads
 const upload = multer({
-  dest: "uploads/",
+  dest: 'uploads/',
   limits: {
     fileSize: 100 * 1024 * 1024, // 100MB limit
   },
-  fileFilter: (_req, _file, cb) => {
-    cb(null, true); // Allow all file types
+  fileFilter: (req, file, cb) => {
+    // Allow all file types for now
+    cb(null, true);
   },
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // ----------------------------
   // File conversion endpoint
-  // ----------------------------
-  app.post("/api/convert", upload.single("file"), async (req, res) => {
+  app.post('/api/convert', upload.single('file'), async (req, res) => {
     try {
       if (!req.file) {
-        return res.status(400).json({ error: "No file uploaded" });
+        return res.status(400).json({ error: 'No file uploaded' });
       }
 
-      const { targetFormat, quality = "medium", compress = "false", emailResult = "false" } = req.body;
-
+      const { targetFormat, quality = 'medium', compress = 'false', emailResult = 'false' } = req.body;
+      
       if (!targetFormat) {
-        return res.status(400).json({ error: "Target format is required" });
+        return res.status(400).json({ error: 'Target format is required' });
       }
 
       const sessionId = (req as any).sessionID || randomUUID();
@@ -49,85 +44,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
         originalFormat,
         targetFormat,
         fileSize,
-        status: "processing",
+        status: 'processing',
         downloadPath: null,
         metadata: {
           quality,
-          compress: compress === "true",
-          emailResult: emailResult === "true",
+          compress: compress === 'true',
+          emailResult: emailResult === 'true',
           uploadPath: req.file.path,
         },
       });
 
+      // Store file info for async processing
       const uploadedFile = req.file;
-
-      // Async conversion with LibreOffice
+      
+      // In a real implementation, this would trigger actual file conversion
+      // For now, we'll simulate the conversion process
       setTimeout(async () => {
         try {
+          // Simulate conversion by copying the file with new extension
           const convertedFileName = `${path.parse(originalFileName).name}.${targetFormat}`;
           const downloadPath = `downloads/${randomUUID()}_${convertedFileName}`;
           const fullDownloadPath = path.join(process.cwd(), downloadPath);
-
+          
           // Ensure downloads directory exists
           const downloadsDir = path.dirname(fullDownloadPath);
           if (!fs.existsSync(downloadsDir)) {
             fs.mkdirSync(downloadsDir, { recursive: true });
           }
 
-          // Use LibreOffice CLI for conversion
-          const command = `soffice --headless --convert-to ${targetFormat} --outdir ${downloadsDir} ${uploadedFile.path}`;
-          await execPromise(command);
-
-          // LibreOffice saves with same base name
-          const libreConvertedPath = path.join(
-            downloadsDir,
-            `${path.parse(originalFileName).name}.${targetFormat}`
-          );
-
-          // Move to our managed path
-          fs.renameSync(libreConvertedPath, fullDownloadPath);
-
-          // Update DB
+          // Copy file to downloads directory (simulating conversion)
+          if (uploadedFile) {
+            fs.copyFileSync(uploadedFile.path, fullDownloadPath);
+          }
+          
+          // Update conversion status
           await storage.updateConversion(conversion.id, {
-            status: "completed",
+            status: 'completed',
             downloadPath: downloadPath,
             completedAt: new Date(),
           });
 
-          // Cleanup uploaded file
-          fs.unlinkSync(uploadedFile.path);
+          // Clean up uploaded file
+          if (uploadedFile) {
+            fs.unlinkSync(uploadedFile.path);
+          }
         } catch (error) {
-          console.error("Conversion failed:", error);
+          console.error('Conversion failed:', error);
           await storage.updateConversion(conversion.id, {
-            status: "failed",
+            status: 'failed',
             completedAt: new Date(),
           });
         }
-      }, 2000);
+      }, 2000); // Simulate 2-second conversion time
 
       res.json({
         conversionId: conversion.id,
-        status: "processing",
-        message: "File uploaded successfully. Conversion in progress.",
+        status: 'processing',
+        message: 'File uploaded successfully. Conversion in progress.',
       });
+
     } catch (error) {
-      console.error("Upload error:", error);
-      res.status(500).json({ error: "Internal server error" });
+      console.error('Upload error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
-  // ----------------------------
   // Check conversion status
-  // ----------------------------
-  app.get("/api/conversion/:id", async (req, res) => {
+  app.get('/api/conversion/:id', async (req, res) => {
     try {
       const conversion = await storage.getConversion(req.params.id);
-
+      
       if (!conversion) {
-        return res.status(404).json({ error: "Conversion not found" });
+        return res.status(404).json({ error: 'Conversion not found' });
       }
 
-      if (conversion.status === "completed" && conversion.downloadPath) {
+      if (conversion.status === 'completed' && conversion.downloadPath) {
         const convertedFileName = `${path.parse(conversion.originalFileName).name}.${conversion.targetFormat}`;
         res.json({
           id: conversion.id,
@@ -146,63 +137,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
     } catch (error) {
-      console.error("Status check error:", error);
-      res.status(500).json({ error: "Internal server error" });
+      console.error('Status check error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
-  // ----------------------------
   // Download converted file
-  // ----------------------------
-  app.get("/api/download/:id", async (req, res) => {
+  app.get('/api/download/:id', async (req, res) => {
     try {
       const conversion = await storage.getConversion(req.params.id);
-
-      if (!conversion || conversion.status !== "completed" || !conversion.downloadPath) {
-        return res.status(404).json({ error: "File not found or not ready" });
+      
+      if (!conversion || conversion.status !== 'completed' || !conversion.downloadPath) {
+        return res.status(404).json({ error: 'File not found or not ready' });
       }
 
       const filePath = path.join(process.cwd(), conversion.downloadPath);
-
+      
       if (!fs.existsSync(filePath)) {
-        return res.status(404).json({ error: "File not found" });
+        return res.status(404).json({ error: 'File not found' });
       }
 
       const convertedFileName = `${path.parse(conversion.originalFileName).name}.${conversion.targetFormat}`;
-
-      res.setHeader("Content-Disposition", `attachment; filename="${convertedFileName}"`);
-      res.setHeader("Content-Type", "application/octet-stream");
-
+      
+      res.setHeader('Content-Disposition', `attachment; filename="${convertedFileName}"`);
+      res.setHeader('Content-Type', 'application/octet-stream');
+      
       const fileStream = fs.createReadStream(filePath);
       fileStream.pipe(res);
 
-      fileStream.on("end", () => {
+      // Clean up file after download
+      fileStream.on('end', () => {
         setTimeout(() => {
           try {
             fs.unlinkSync(filePath);
           } catch (error) {
-            console.error("Failed to delete file:", error);
+            console.error('Failed to delete file:', error);
           }
-        }, 1000);
+        }, 1000); // Delete after 1 second to ensure download completed
       });
+
     } catch (error) {
-      console.error("Download error:", error);
-      res.status(500).json({ error: "Internal server error" });
+      console.error('Download error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
-  // ----------------------------
   // Contact form endpoint
-  // ----------------------------
-  app.post("/api/contact", async (req, res) => {
+  app.post('/api/contact', async (req, res) => {
     try {
       const { name, email, subject, category, message } = req.body;
 
       if (!name || !email || !subject || !message) {
-        return res.status(400).json({ error: "Required fields are missing" });
+        return res.status(400).json({ error: 'Required fields are missing' });
       }
 
-      console.log("Contact form submission:", {
+      // In a real implementation, this would send an email or save to database
+      console.log('Contact form submission:', {
         name,
         email,
         subject,
@@ -211,58 +201,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date().toISOString(),
       });
 
-      res.json({
-        success: true,
-        message: "Message sent successfully",
+      res.json({ 
+        success: true, 
+        message: 'Message sent successfully' 
       });
+
     } catch (error) {
-      console.error("Contact form error:", error);
-      res.status(500).json({ error: "Internal server error" });
+      console.error('Contact form error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
-  // ----------------------------
-  // Recent conversions
-  // ----------------------------
-  app.get("/api/conversions", async (req, res) => {
+  // Get user's recent conversions
+  app.get('/api/conversions', async (req, res) => {
     try {
-      const sessionId = (req as any).sessionID || "";
+      const sessionId = (req as any).sessionID || '';
       const conversions = await storage.getConversionsBySession(sessionId);
+      
+      res.json(conversions.map(conversion => ({
+        id: conversion.id,
+        originalFileName: conversion.originalFileName,
+        originalFormat: conversion.originalFormat,
+        targetFormat: conversion.targetFormat,
+        status: conversion.status,
+        createdAt: conversion.createdAt,
+        completedAt: conversion.completedAt,
+      })));
 
-      res.json(
-        conversions.map((conversion) => ({
-          id: conversion.id,
-          originalFileName: conversion.originalFileName,
-          originalFormat: conversion.originalFormat,
-          targetFormat: conversion.targetFormat,
-          status: conversion.status,
-          createdAt: conversion.createdAt,
-          completedAt: conversion.completedAt,
-        }))
-      );
     } catch (error) {
-      console.error("Conversions fetch error:", error);
-      res.status(500).json({ error: "Internal server error" });
+      console.error('Conversions fetch error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
-  // ----------------------------
-  // Cleanup old files
-  // ----------------------------
+  // Cleanup old files (run periodically)
   const cleanupOldFiles = () => {
-    const uploadsDir = path.join(process.cwd(), "uploads");
-    const downloadsDir = path.join(process.cwd(), "downloads");
-
+    const uploadsDir = path.join(process.cwd(), 'uploads');
+    const downloadsDir = path.join(process.cwd(), 'downloads');
+    
     const cleanupDirectory = (dir: string) => {
       if (!fs.existsSync(dir)) return;
-
+      
       const files = fs.readdirSync(dir);
-      const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-
-      files.forEach((file) => {
+      const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+      
+      files.forEach(file => {
         const filePath = path.join(dir, file);
         const stats = fs.statSync(filePath);
-
+        
         if (stats.mtime.getTime() < oneDayAgo) {
           try {
             fs.unlinkSync(filePath);
@@ -278,6 +264,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     cleanupDirectory(downloadsDir);
   };
 
+  // Run cleanup every hour
   setInterval(cleanupOldFiles, 60 * 60 * 1000);
 
   const httpServer = createServer(app);
