@@ -315,7 +315,7 @@ export class FileConverterService {
 
   // ---------- ZIP / UNZIP ----------
   async zipFiles(inputPaths: string[], outputPath: string): Promise<string> {
->>>>>>> 5358066945de0529b790bd4ffe7d8a7cbf367aa6
+
     return new Promise((resolve, reject) => {
       const output = fs.createWriteStream(outputPath);
       const archive = archiver('zip', { zlib: { level: 9 } });
@@ -360,6 +360,5 @@ export class FileConverterService {
     // ensure newExt begins with dot
     const ext = newExt.startsWith('.') ? newExt : `.${newExt}`;
     return path.join(dir, base + ext);
->>>>>>> 5358066945de0529b790bd4ffe7d8a7cbf367aa6
   }
 }
