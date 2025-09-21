@@ -1,364 +1,555 @@
 import sharp from 'sharp';
-import ffmpeg from 'fluent-ffmpeg';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
-import archiver from 'archiver';
-import unzipper from 'unzipper';
+import yazl from 'yazl';
+import yauzl from 'yauzl';
+import LibreOffice from 'libreoffice-convert';
 
 const execAsync = promisify(exec);
+const libreOfficeConvert = promisify(LibreOffice.convert);
 
 export interface ConversionOptions {
   quality: 'low' | 'medium' | 'high';
   compress: boolean;
   metadata?: Record<string, any>;
+  preserveFormatting?: boolean;
+  ocrEnabled?: boolean;
 }
 
+export interface ConversionResult {
+  outputPath: string;
+  originalSize: number;
+  convertedSize: number;
+  processingTime: number;
+  warnings?: string[];
+  url?: string;
+}
+
+/**
+ * Modern File Converter Service for Express/React Application
+ * Uses supported packages: sharp, yazl/yauzl, libreoffice-convert
+ */
 export class FileConverterService {
-<<<<<<< HEAD
-  // ---------------------- QUALITY SETTINGS ----------------------
-  private static getQualitySettings(quality: 'low' | 'medium' | 'high') {
-    switch (quality) {
-=======
-  private static getQualitySettings(q: 'low' | 'medium' | 'high' = 'medium') {
-    switch (q) {
->>>>>>> 5358066945de0529b790bd4ffe7d8a7cbf367aa6
-      case 'low':
-        return { imageQuality: 60, videoBitrate: '500k', audioBitrate: '64k' };
-      case 'medium':
-        return { imageQuality: 80, videoBitrate: '1000k', audioBitrate: '128k' };
-      case 'high':
-        return { imageQuality: 95, videoBitrate: '2000k', audioBitrate: '192k' };
-<<<<<<< HEAD
-    }
+  private static readonly UPLOAD_DIR = path.join(process.cwd(), 'uploads');
+  private static readonly TEMP_DIR = path.join(process.cwd(), 'temp');
+  private static readonly CONVERTED_DIR = path.join(process.cwd(), 'converted');
+  private static readonly MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+  private static readonly TIMEOUT = 300000; // 5 minutes
+
+  constructor() {
+    this.ensureDirectories();
   }
 
-  // ---------------------- DOCUMENT CONVERSION ----------------------
-  private getLibreOfficeFilter(ext: string): string {
-    switch (ext) {
-      case '.pdf':
-        return 'pdf:writer_pdf_Export';
-      case '.docx':
-        return 'docx:"MS Word 2007 XML"';
-      case '.doc':
-        return 'doc:"MS Word 97"';
-      case '.xlsx':
-        return 'xlsx:"Calc MS Excel 2007 XML"';
-      case '.pptx':
-        return 'pptx:"Impress MS PowerPoint 2007 XML"';
-      case '.odt':
-        return 'odt';
-      default:
-        return ext.replace('.', '');
-    }
+  // ===================== QUALITY PRESETS =====================
+  private static getQualitySettings(quality: 'low' | 'medium' | 'high' = 'medium') {
+    const presets = {
+      low: {
+        imageQuality: 60,
+        imageCompressionLevel: 9,
+        videoBitrate: '500k',
+        audioSampleRate: 22050
+      },
+      medium: {
+        imageQuality: 80,
+        imageCompressionLevel: 6,
+        videoBitrate: '1000k',
+        audioSampleRate: 44100
+      },
+      high: {
+        imageQuality: 95,
+        imageCompressionLevel: 3,
+        videoBitrate: '2000k',
+        audioSampleRate: 48000
+      }
+    };
+    return presets[quality];
   }
 
-  async convertDocument(inputPath: string, outputExt: string): Promise<string> {
-    const outputDir = path.dirname(inputPath);
-    const outputPath = path.join(
-      outputDir,
-      path.basename(inputPath, path.extname(inputPath)) + outputExt
-    );
+  // ===================== DOCUMENT CONVERSION =====================
 
-    // Special case: PDF → DOCX needs a dedicated tool
-    if (path.extname(inputPath).toLowerCase() === '.pdf' && outputExt === '.docx') {
-      await this.convertPdfToDocx(inputPath, outputPath);
-      return outputPath;
-    }
-
-    const filter = this.getLibreOfficeFilter(outputExt);
-
-    await execAsync(
-      `soffice --headless --convert-to ${filter} --outdir "${outputDir}" "${inputPath}"`
-    );
-
-    if (!fs.existsSync(outputPath)) {
-      throw new Error(`Document conversion failed: ${inputPath} → ${outputExt}`);
-    }
-    return outputPath;
-  }
-
-  private async convertPdfToDocx(inputPath: string, outputPath: string): Promise<void> {
-    // Requires Python + pdf2docx installed
-    // pip install pdf2docx
-    const cmd = `python3 -m pdf2docx.cli ${inputPath} ${outputPath}`;
-    try {
-      await execAsync(cmd);
-    } catch (err) {
-      throw new Error(`PDF→DOCX conversion failed. Ensure pdf2docx is installed. ${err}`);
-    }
-  }
-
-  // ---------------------- IMAGE CONVERSION ----------------------
-  async convertImage(
+  async convertDocument(
     inputPath: string,
-    outputExt: 'jpg' | 'png' | 'webp',
+    outputFormat: string,
+    options: ConversionOptions = { quality: 'medium', compress: false }
+  ): Promise<ConversionResult> {
+    const startTime = Date.now();
+    const inputExt = path.extname(inputPath).toLowerCase();
+    const outputExt = outputFormat.startsWith('.') ? outputFormat : `.${outputFormat}`;
+    const fileName = path.basename(inputPath, path.extname(inputPath));
+    const outputPath = path.join(FileConverterService.CONVERTED_DIR, `${fileName}_${Date.now()}${outputExt}`);
+
+    await this.validateFile(inputPath);
+
+    const warnings: string[] = [];
+
+    try {
+      // Special PDF→DOCX conversion using pdf2docx (if available)
+      if (inputExt === '.pdf' && outputExt.toLowerCase() === '.docx') {
+        try {
+          const processingPath = await this.convertPdfToDocxAdvanced(inputPath, outputPath, options);
+          const result = await this.buildConversionResult(inputPath, processingPath, startTime, warnings);
+          result.url = `/api/download/${path.basename(processingPath)}`;
+          return result;
+        } catch (error: any) {
+          console.warn('pdf2docx failed, falling back to LibreOffice:', error.message);
+          warnings.push('Fell back to LibreOffice conversion');
+        }
+      }
+
+      // Use LibreOffice for all other document conversions
+      const processingPath = await this.convertWithLibreOffice(inputPath, outputExt, options);
+      const result = await this.buildConversionResult(inputPath, processingPath, startTime, warnings);
+      result.url = `/api/download/${path.basename(processingPath)}`;
+      return result;
+
+    } catch (error: any) {
+      throw new Error(`Document conversion failed: ${error.message}`);
+    }
+  }
+
+  private async convertPdfToDocxAdvanced(
+    inputPath: string,
+    outputPath: string,
     options: ConversionOptions
   ): Promise<string> {
-    const { imageQuality } = FileConverterService.getQualitySettings(options.quality);
-    const outputPath = this.replaceExtension(inputPath, `.${outputExt}`);
+    // Check if pdf2docx is available
+    try {
+      await execAsync('python3 -c "import pdf2docx"');
+    } catch {
+      try {
+        await execAsync('python -c "import pdf2docx"');
+      } catch {
+        throw new Error('pdf2docx not found. Install with: pip install pdf2docx');
+      }
+    }
 
-    await sharp(inputPath)
-      .toFormat(outputExt, { quality: imageQuality })
-      .toFile(outputPath);
-=======
-      case 'medium':
-      default:
-        return { imageQuality: 80, videoBitrate: '1000k', audioBitrate: '128k' };
+    const pythonScript = `
+import sys
+from pdf2docx import Converter
+import json
+
+def convert_pdf_to_docx(input_path, output_path, preserve_formatting=True):
+    try:
+        cv = Converter(input_path)
+        settings = {
+            'start': 0,
+            'end': None,
+            'pages': None,
+            'multi_processing': True,
+            'cpu_count': None,
+            'password': None
+        }
+        cv.convert(output_path, **settings)
+        cv.close()
+        return {"success": True, "message": "PDF converted successfully"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+if __name__ == "__main__":
+    result = convert_pdf_to_docx(
+        "${inputPath.replace(/\\/g, '\\\\')}", 
+        "${outputPath.replace(/\\/g, '\\\\')}", 
+        ${options.preserveFormatting !== false}
+    )
+    print(json.dumps(result))
+`;
+
+    const tempScriptPath = path.join(FileConverterService.TEMP_DIR, `convert_${Date.now()}.py`);
+    fs.writeFileSync(tempScriptPath, pythonScript);
+
+    try {
+      const { stdout } = await execAsync(`python3 "${tempScriptPath}"`, {
+        timeout: FileConverterService.TIMEOUT
+      });
+
+      const result = JSON.parse(stdout);
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+
+      return outputPath;
+    } finally {
+      fs.unlink(tempScriptPath, () => {});
     }
   }
 
-  // Wrap libreoffice-convert into a promise
-  private convertWithLibreOffice(buffer: Buffer, targetExt: string): Promise<Buffer> {
+  private async convertWithLibreOffice(
+    inputPath: string,
+    outputExt: string,
+    options: ConversionOptions
+  ): Promise<string> {
+    const fileName = path.basename(inputPath, path.extname(inputPath));
+    const outputPath = path.join(FileConverterService.CONVERTED_DIR, `${fileName}_${Date.now()}${outputExt}`);
+
+    try {
+      const inputBuffer = fs.readFileSync(inputPath);
+      const format = outputExt.replace('.', '');
+
+      const convertedBuffer = await libreOfficeConvert(inputBuffer, format, undefined);
+      fs.writeFileSync(outputPath, convertedBuffer);
+
+      return outputPath;
+    } catch (error: any) {
+      throw new Error(`LibreOffice conversion error: ${error.message}`);
+    }
+  }
+
+  // ===================== IMAGE CONVERSION =====================
+
+  async convertImage(
+    inputPath: string,
+    outputFormat: 'jpg' | 'jpeg' | 'png' | 'webp' | 'avif' | 'tiff',
+    options: ConversionOptions = { quality: 'medium', compress: true }
+  ): Promise<ConversionResult> {
+    const startTime = Date.now();
+    const settings = FileConverterService.getQualitySettings(options.quality);
+    const outputExt = outputFormat === 'jpeg' ? 'jpg' : outputFormat;
+    const fileName = path.basename(inputPath, path.extname(inputPath));
+    const outputPath = path.join(FileConverterService.CONVERTED_DIR, `${fileName}_${Date.now()}.${outputExt}`);
+
+    await this.validateFile(inputPath);
+
+    try {
+      let sharpInstance = sharp(inputPath);
+      const formatOptions = this.getImageFormatOptions(outputFormat, settings, options);
+
+      if (options.metadata) {
+        sharpInstance = sharpInstance.withMetadata(options.metadata);
+      }
+
+      await sharpInstance.toFormat(outputFormat as any, formatOptions).toFile(outputPath);
+
+      const result = await this.buildConversionResult(inputPath, outputPath, startTime);
+      result.url = `/api/download/${path.basename(outputPath)}`;
+      return result;
+    } catch (error: any) {
+      throw new Error(`Image conversion failed: ${error.message}`);
+    }
+  }
+
+  private getImageFormatOptions(format: string, settings: any, options: ConversionOptions) {
+    const baseOptions = {
+      quality: settings.imageQuality,
+      compression: options.compress ? settings.imageCompressionLevel : 0
+    };
+
+    switch (format) {
+      case 'webp':
+        return { ...baseOptions, effort: 6, smartSubsample: true };
+      case 'avif':
+        return { ...baseOptions, effort: 4, chromaSubsampling: '4:2:0' };
+      case 'png':
+        return { compressionLevel: settings.imageCompressionLevel, progressive: true };
+      case 'jpg':
+      case 'jpeg':
+        return { ...baseOptions, progressive: true, mozjpeg: true };
+      default:
+        return baseOptions;
+    }
+  }
+
+  // ===================== VIDEO/AUDIO CONVERSION =====================
+
+  async convertVideo(
+    inputPath: string,
+    outputFormat: 'mp4' | 'avi' | 'mkv' | 'webm' | 'mov',
+    options: ConversionOptions = { quality: 'medium', compress: true }
+  ): Promise<ConversionResult> {
+    const startTime = Date.now();
+    const settings = FileConverterService.getQualitySettings(options.quality);
+    const fileName = path.basename(inputPath, path.extname(inputPath));
+    const outputPath = path.join(FileConverterService.CONVERTED_DIR, `${fileName}_${Date.now()}.${outputFormat}`);
+
+    await this.validateFile(inputPath);
+
     return new Promise((resolve, reject) => {
-      // libreoffice-convert expects extension like '.pdf' or '.docx'
-      LibreOffice.convert(buffer, targetExt, (err: any, done: Buffer) => {
-        if (err) return reject(err);
-        resolve(done);
+      const args = [
+        '-i', inputPath,
+        '-c:v', 'libx264',
+        '-c:a', 'aac',
+        '-b:v', settings.videoBitrate,
+        '-y', // Overwrite output
+        outputPath
+      ];
+
+      if (options.compress) {
+        args.splice(-2, 0, '-preset', 'medium', '-crf', '23');
+      }
+
+      const ffmpegProcess = require('child_process').spawn('ffmpeg', args);
+
+      ffmpegProcess.on('close', async (code: number) => {
+        if (code === 0) {
+          const result = await this.buildConversionResult(inputPath, outputPath, startTime);
+          result.url = `/api/download/${path.basename(outputPath)}`;
+          resolve(result);
+        } else {
+          reject(new Error(`FFmpeg process exited with code ${code}`));
+        }
+      });
+
+      ffmpegProcess.on('error', (error: any) => {
+        reject(new Error(`FFmpeg process error: ${error.message}`));
+      });
+
+      setTimeout(() => {
+        ffmpegProcess.kill('SIGKILL');
+        reject(new Error('Video conversion timeout'));
+      }, FileConverterService.TIMEOUT);
+    });
+  }
+
+  async convertAudio(
+    inputPath: string,
+    outputFormat: 'mp3' | 'aac' | 'ogg' | 'wav' | 'flac' | 'm4a',
+    options: ConversionOptions = { quality: 'medium', compress: true }
+  ): Promise<ConversionResult> {
+    const startTime = Date.now();
+    const settings = FileConverterService.getQualitySettings(options.quality);
+    const fileName = path.basename(inputPath, path.extname(inputPath));
+    const outputPath = path.join(FileConverterService.CONVERTED_DIR, `${fileName}_${Date.now()}.${outputFormat}`);
+
+    await this.validateFile(inputPath);
+
+    return new Promise((resolve, reject) => {
+      const codec = this.getAudioCodec(outputFormat);
+      const args = [
+        '-i', inputPath,
+        '-c:a', codec,
+        '-ar', settings.audioSampleRate.toString(),
+        '-y',
+        outputPath
+      ];
+
+      const ffmpegProcess = require('child_process').spawn('ffmpeg', args);
+
+      ffmpegProcess.on('close', async (code: number) => {
+        if (code === 0) {
+          const result = await this.buildConversionResult(inputPath, outputPath, startTime);
+          result.url = `/api/download/${path.basename(outputPath)}`;
+          resolve(result);
+        } else {
+          reject(new Error(`FFmpeg process exited with code ${code}`));
+        }
+      });
+
+      ffmpegProcess.on('error', (error: any) => {
+        reject(new Error(`Audio conversion error: ${error.message}`));
       });
     });
   }
 
-  // ---------- Documents ----------
-  /**
-   * Convert documents using LibreOffice where possible.
-   * Special fallback for PDF -> DOCX: if LibreOffice's output contains little/no text,
-   * extract text from PDF and create a new DOCX using 'docx' package.
-   */
-  async convertDocument(inputPath: string, outputExt: string, options?: ConversionOptions): Promise<string> {
-    const inputBuffer = fs.readFileSync(inputPath);
-    const lowerOutExt = outputExt.startsWith('.') ? outputExt.toLowerCase() : `.${outputExt.toLowerCase()}`;
-    const outputPath = this.replaceExtension(inputPath, lowerOutExt);
-
-    // Try LibreOffice conversion first for anything LibreOffice supports
-    try {
-      const convertedBuffer = await this.convertWithLibreOffice(inputBuffer, lowerOutExt);
-      fs.writeFileSync(outputPath, convertedBuffer);
-    } catch (e) {
-      // If LibreOffice conversion fails, rethrow with helpful message
-      throw new Error(`LibreOffice conversion failed: ${(e && e.message) || e}`);
-    }
-
-    // If converting to .docx (or similar) from a PDF, check whether result has real text.
-    // If not, fallback to extracting text and generating a new .docx.
-    const inputExt = path.extname(inputPath).toLowerCase();
-    if (inputExt === '.pdf' && (lowerOutExt === '.docx' || lowerOutExt === '.doc' || lowerOutExt === '.odt')) {
-      try {
-        // Use mammoth to extract text from produced docx
-        if (lowerOutExt === '.docx') {
-          const mammothRes = await mammoth.extractRawText({ path: outputPath });
-          const extracted = String(mammothRes?.value || '').trim();
-
-          // If LibreOffice produced almost no text (likely images only), fallback
-          if (extracted.length < 50) {
-            // Extract text from PDF using pdf-parse
-            const pdfData = await pdfParse(inputBuffer);
-            const pdfText = (pdfData && pdfData.text) ? String(pdfData.text).trim() : '';
-
-            // If no text found, warn user — scanned PDF likely needs OCR (tesseract)
-            if (!pdfText || pdfText.length < 10) {
-              // Keep the LibreOffice output, but surface a warning
-              // (Don't overwrite with an empty doc)
-              console.warn('Warning: PDF seems scanned or image-only. Consider running OCR (tesseract) for full text extraction.');
-              return outputPath;
-            }
-
-            // Build a simple .docx with extracted text so the output actually has editable content
-            const paragraphs = pdfText.split(/\r?\n\r?\n/).map((para) => new Paragraph({ children: [new TextRun(para.replace(/\r?\n/g, ' '))] }));
-            const doc = new Document({ sections: [{ properties: {}, children: paragraphs }] });
-            const buffer = await Packer.toBuffer(doc);
-            fs.writeFileSync(outputPath, buffer);
-          }
-        } else {
-          // If output was .doc or .odt, still attempt to sanity-check via converting to docx and running mammoth
-          // create temp docx from the output using libreoffice (if possible)
-          try {
-            const tempDocxPath = this.replaceExtension(outputPath, '.docx');
-            const outBuf = fs.readFileSync(outputPath);
-            // Try converting the produced file to docx (this may succeed)
-            const convertedAgain = await this.convertWithLibreOffice(outBuf, '.docx');
-            fs.writeFileSync(tempDocxPath, convertedAgain);
-            const mammothRes = await mammoth.extractRawText({ path: tempDocxPath });
-            const extracted = String(mammothRes?.value || '').trim();
-            if (extracted.length < 50) {
-              // Fallback to PDF text extraction
-              const pdfData = await pdfParse(inputBuffer);
-              const pdfText = (pdfData && pdfData.text) ? String(pdfData.text).trim() : '';
-              if (pdfText && pdfText.length > 10) {
-                const paragraphs = pdfText.split(/\r?\n\r?\n/).map((para) => new Paragraph({ children: [new TextRun(para.replace(/\r?\n/g, ' '))] }));
-                const doc = new Document({ sections: [{ properties: {}, children: paragraphs }] });
-                const buffer = await Packer.toBuffer(doc);
-                // overwrite the original outputPath (doc/odt) by generating a docx and renaming
-                fs.writeFileSync(tempDocxPath, buffer);
-                // Optionally convert tempDocxPath to user's requested extension via libreoffice
-                const finalBuf = await this.convertWithLibreOffice(buffer, lowerOutExt);
-                fs.writeFileSync(outputPath, finalBuf);
-              } else {
-                console.warn('Warning: PDF seems scanned or image-only. Consider OCR.');
-              }
-            }
-            // cleanup temp docx if exists
-            try { if (fs.existsSync(tempDocxPath)) fs.unlinkSync(tempDocxPath); } catch (_) {}
-          } catch (_) {
-            // ignore fallback errors here
-          }
-        }
-      } catch (ex) {
-        // don't block main conversion if fallback check fails; log and continue
-        console.warn('Document content check/fallback failed:', ex && ex.message ? ex.message : ex);
-      }
-    }
->>>>>>> 5358066945de0529b790bd4ffe7d8a7cbf367aa6
-
-    return outputPath;
-  }
-
-<<<<<<< HEAD
-  // ---------------------- VIDEO CONVERSION ----------------------
-  async convertVideo(
-    inputPath: string,
-    outputExt: 'mp4' | 'avi' | 'mkv',
-    options: ConversionOptions
-  ): Promise<string> {
-    const { videoBitrate } = FileConverterService.getQualitySettings(options.quality);
-    const outputPath = this.replaceExtension(inputPath, `.${outputExt}`);
-
-    return new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .videoBitrate(videoBitrate)
-        .output(outputPath)
-        .on('end', () => resolve(outputPath))
-        .on('error', reject)
-        .run();
-    });
-  }
-
-  // ---------------------- AUDIO CONVERSION ----------------------
-  async convertAudio(
-    inputPath: string,
-    outputExt: 'mp3' | 'aac' | 'ogg' | 'wav',
-    options: ConversionOptions
-  ): Promise<string> {
-    const { audioBitrate } = FileConverterService.getQualitySettings(options.quality);
-    const outputPath = this.replaceExtension(inputPath, `.${outputExt}`);
-
-    return new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .audioBitrate(audioBitrate)
-        .output(outputPath)
-        .on('end', () => resolve(outputPath))
-        .on('error', reject)
-        .run();
-    });
-  }
-
-  // ---------------------- ARCHIVE SUPPORT ----------------------
-  async zipFile(inputPaths: string[], outputPath: string): Promise<string> {
-=======
-  // ---------- Images ----------
-  async convertImage(inputPath: string, outputExt: 'jpg' | 'jpeg' | 'png' | 'webp' | 'tiff', options?: ConversionOptions): Promise<string> {
-    const q = FileConverterService.getQualitySettings(options?.quality || 'medium');
-    const normalized = outputExt === 'jpeg' ? 'jpg' : outputExt;
-    const out = this.replaceExtension(inputPath, `.${normalized}`);
-    // Sharp toFormat expects format string without dot
-    await sharp(inputPath).toFormat(normalized as any, { quality: q.imageQuality }).toFile(out);
-    return out;
-  }
-
-  // ---------- Video ----------
-  async convertVideo(inputPath: string, outputExt: 'mp4' | 'avi' | 'mkv' = 'mp4', options?: ConversionOptions): Promise<string> {
-    const q = FileConverterService.getQualitySettings(options?.quality || 'medium');
-    const out = this.replaceExtension(inputPath, `.${outputExt}`);
-
-    const codecMap: Record<string, { v?: string; a?: string }> = {
-      mp4: { v: 'libx264', a: 'aac' },
-      mkv: { v: 'libx264', a: 'aac' },
-      avi: { v: 'mpeg4', a: 'libmp3lame' },
-    };
-
-    const codec = codecMap[outputExt] || { v: 'libx264', a: 'aac' };
-
-    return new Promise((resolve, reject) => {
-      const proc = ffmpeg(inputPath)
-        .videoCodec(codec.v)
-        .audioCodec(codec.a)
-        .outputOptions(['-b:v', q.videoBitrate])
-        .on('error', (err) => reject(err))
-        .on('end', () => resolve(out))
-        .save(out);
-    });
-  }
-
-  // ---------- Audio ----------
-  async convertAudio(inputPath: string, outputExt: 'mp3' | 'aac' | 'ogg' | 'wav' = 'mp3', options?: ConversionOptions): Promise<string> {
-    const q = FileConverterService.getQualitySettings(options?.quality || 'medium');
-    const out = this.replaceExtension(inputPath, `.${outputExt}`);
-
-    const codecMap: Record<string, string> = {
+  private getAudioCodec(format: string): string {
+    const codecs = {
       mp3: 'libmp3lame',
       aac: 'aac',
       ogg: 'libvorbis',
       wav: 'pcm_s16le',
+      flac: 'flac',
+      m4a: 'aac'
     };
-    const codec = codecMap[outputExt] || 'libmp3lame';
-
-    return new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .audioCodec(codec)
-        .audioBitrate(q.audioBitrate)
-        .on('error', (err) => reject(err))
-        .on('end', () => resolve(out))
-        .save(out);
-    });
+    return codecs[format] || 'libmp3lame';
   }
 
-  // ---------- ZIP / UNZIP ----------
-  async zipFiles(inputPaths: string[], outputPath: string): Promise<string> {
+  // ===================== ARCHIVE OPERATIONS =====================
+
+  async createArchive(
+    inputPaths: string[],
+    outputName?: string,
+    options: ConversionOptions = { quality: 'medium', compress: true }
+  ): Promise<ConversionResult> {
+    const startTime = Date.now();
+    const fileName = outputName || `archive_${Date.now()}`;
+    const outputPath = path.join(FileConverterService.CONVERTED_DIR, `${fileName}.zip`);
 
     return new Promise((resolve, reject) => {
-      const output = fs.createWriteStream(outputPath);
-      const archive = archiver('zip', { zlib: { level: 9 } });
+      const zipFile = new yazl.ZipFile();
+      let totalSize = 0;
 
-      output.on('close', () => resolve(outputPath));
-<<<<<<< HEAD
-      archive.on('error', reject);
+      inputPaths.forEach(filePath => {
+        if (fs.existsSync(filePath)) {
+          const stat = fs.statSync(filePath);
+          totalSize += stat.size;
 
-      archive.pipe(output);
-      inputPaths.forEach(file => archive.file(file, { name: path.basename(file) }));
-=======
-      archive.on('error', (err) => reject(err));
-
-      archive.pipe(output);
-      inputPaths.forEach((p) => {
-        archive.file(p, { name: path.basename(p) });
+          if (stat.isDirectory()) {
+            this.addDirectoryToZip(zipFile, filePath, path.basename(filePath));
+          } else {
+            zipFile.addFile(filePath, path.basename(filePath));
+          }
+        }
       });
->>>>>>> 5358066945de0529b790bd4ffe7d8a7cbf367aa6
-      archive.finalize();
+
+      zipFile.end();
+
+      const writeStream = fs.createWriteStream(outputPath);
+      zipFile.outputStream.pipe(writeStream);
+
+      writeStream.on('close', async () => {
+        try {
+          const result: ConversionResult = {
+            outputPath,
+            originalSize: totalSize,
+            convertedSize: fs.statSync(outputPath).size,
+            processingTime: Date.now() - startTime,
+            url: `/api/download/${path.basename(outputPath)}`
+          };
+          resolve(result);
+        } catch (error) {
+          reject(error);
+        }
+      });
+
+      writeStream.on('error', reject);
     });
   }
 
-<<<<<<< HEAD
-  async unzipFile(zipPath: string, extractTo: string): Promise<void> {
-    await fs.createReadStream(zipPath).pipe(unzipper.Extract({ path: extractTo })).promise();
+  private addDirectoryToZip(zipFile: yazl.ZipFile, dirPath: string, relativePath: string) {
+    const files = fs.readdirSync(dirPath);
+    files.forEach(file => {
+      const fullPath = path.join(dirPath, file);
+      const relPath = path.join(relativePath, file);
+      const stat = fs.statSync(fullPath);
+
+      if (stat.isDirectory()) {
+        this.addDirectoryToZip(zipFile, fullPath, relPath);
+      } else {
+        zipFile.addFile(fullPath, relPath);
+      }
+    });
   }
 
-  // ---------------------- UTILS ----------------------
-  private replaceExtension(filePath: string, newExt: string): string {
-    const dir = path.dirname(filePath);
-    const base = path.basename(filePath, path.extname(filePath));
-    return path.join(dir, base + newExt);
-=======
-  async unzipFile(zipPath: string, destDir: string): Promise<void> {
-    await fs.createReadStream(zipPath).pipe(unzipper.Extract({ path: destDir })).promise();
+  async extractArchive(archivePath: string, extractTo?: string): Promise<void> {
+    const extractPath = extractTo || path.join(FileConverterService.TEMP_DIR, `extracted_${Date.now()}`);
+
+    if (!fs.existsSync(extractPath)) {
+      fs.mkdirSync(extractPath, { recursive: true });
+    }
+
+    return new Promise((resolve, reject) => {
+      yauzl.open(archivePath, { lazyEntries: true }, (err, zipfile) => {
+        if (err) return reject(err);
+
+        zipfile!.readEntry();
+        zipfile!.on('entry', (entry) => {
+          if (/\/$/.test(entry.fileName)) {
+            fs.mkdirSync(path.join(extractPath, entry.fileName), { recursive: true });
+            zipfile!.readEntry();
+          } else {
+            zipfile!.openReadStream(entry, (err, readStream) => {
+              if (err) return reject(err);
+
+              const filePath = path.join(extractPath, entry.fileName);
+              const dir = path.dirname(filePath);
+
+              if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+              }
+
+              const writeStream = fs.createWriteStream(filePath);
+              readStream!.pipe(writeStream);
+
+              writeStream.on('close', () => {
+                zipfile!.readEntry();
+              });
+            });
+          }
+        });
+
+        zipfile!.on('end', () => resolve());
+        zipfile!.on('error', reject);
+      });
+    });
   }
 
-  // ---------- Utility ----------
-  private replaceExtension(filePath: string, newExt: string): string {
-    const dir = path.dirname(filePath);
-    const base = path.basename(filePath, path.extname(filePath));
-    // ensure newExt begins with dot
-    const ext = newExt.startsWith('.') ? newExt : `.${newExt}`;
-    return path.join(dir, base + ext);
+  // ===================== UTILITY METHODS =====================
+
+  private async validateFile(filePath: string): Promise<void> {
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Input file does not exist: ${filePath}`);
+    }
+
+    const stats = fs.statSync(filePath);
+    if (stats.size > FileConverterService.MAX_FILE_SIZE) {
+      throw new Error(`File too large: ${Math.round(stats.size / 1024 / 1024)}MB (max: ${Math.round(FileConverterService.MAX_FILE_SIZE / 1024 / 1024)}MB)`);
+    }
+
+    if (stats.size === 0) {
+      throw new Error('Input file is empty');
+    }
+  }
+
+  private async buildConversionResult(
+    inputPath: string,
+    outputPath: string,
+    startTime: number,
+    warnings: string[] = []
+  ): Promise<ConversionResult> {
+    const inputStats = fs.statSync(inputPath);
+    const outputStats = fs.statSync(outputPath);
+
+    return {
+      outputPath,
+      originalSize: inputStats.size,
+      convertedSize: outputStats.size,
+      processingTime: Date.now() - startTime,
+      warnings: warnings.length > 0 ? warnings : undefined
+    };
+  }
+
+  private ensureDirectories(): void {
+    const dirs = [
+      FileConverterService.UPLOAD_DIR,
+      FileConverterService.TEMP_DIR,
+      FileConverterService.CONVERTED_DIR
+    ];
+
+    dirs.forEach(dir => {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    });
+  }
+
+  async cleanupTempFiles(): Promise<void> {
+    const oneHourAgo = Date.now() - (60 * 60 * 1000);
+
+    try {
+      const files = fs.readdirSync(FileConverterService.TEMP_DIR);
+
+      for (const file of files) {
+        const filePath = path.join(FileConverterService.TEMP_DIR, file);
+        const stats = fs.statSync(filePath);
+
+        if (stats.mtimeMs < oneHourAgo) {
+          fs.unlinkSync(filePath);
+        }
+      }
+    } catch (error: any) {
+      console.warn('Cleanup failed:', error.message);
+    }
+  }
+
+  async getConvertedFiles(): Promise<{ name: string; size: number; created: Date; url: string }[]> {
+    try {
+      const files = fs.readdirSync(FileConverterService.CONVERTED_DIR);
+
+      return files.map(file => {
+        const filePath = path.join(FileConverterService.CONVERTED_DIR, file);
+        const stats = fs.statSync(filePath);
+
+        return {
+          name: file,
+          size: stats.size,
+          created: stats.birthtime,
+          url: `/api/download/${file}`
+        };
+      }).sort((a, b) => b.created.getTime() - a.created.getTime());
+    } catch (error) {
+      return [];
+    }
   }
 }
+
+export default FileConverterService;
