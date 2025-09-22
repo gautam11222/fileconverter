@@ -3,5 +3,5 @@ services:
     name: file-converter
     env: docker
     plan: free
-    dockerfilePath: Dockerfile
+    dockerfilePath: DockerFile
     autoDeploy: true
