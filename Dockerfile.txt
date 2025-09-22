@@ -1,6 +1,9 @@
 # ================= NODE + LIBREOFFICE + PYTHON ENV =================
 FROM node:24-bullseye
 
+# Set HOME for LibreOffice
+ENV HOME=/tmp
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     libreoffice \
@@ -20,32 +23,29 @@ RUN apt-get update && apt-get install -y \
     fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
+# Pre-create LibreOffice profile to avoid "no export filter" errors
+RUN mkdir -p /tmp/libreoffice && soffice --headless --invisible --nologo --convert-to pdf --outdir /tmp/libreoffice /tmp || true
+
 # ================= PYTHON VENV =================
-# Create Python virtual environment
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-
-# Upgrade pip inside virtualenv
 RUN pip install --upgrade pip
-
-# Install Python packages inside virtualenv
 RUN pip install pdf2docx camelot-py[cv] pandas
 
 # ================= NODE APP =================
-# Set working directory
 WORKDIR /app
 
-# Copy package.json files and install dependencies
+# Copy package.json and install dependencies
 COPY package*.json ./
 RUN npm install
 
-# Copy all project files
+# Copy the rest of the application
 COPY . .
 
 # Build the Node project
 RUN npm run build
 
-# Expose the port your Express server uses
+# Expose Express port
 EXPOSE 10000
 
 # Start the app
