@@ -6,7 +6,7 @@ import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
 import { storage } from "./storage";
-import FileConverterService, { ConversionOptions } from "./File-converter-service";
+import FileConverterService, { ConversionOptions } from "./file-converter";
 
 const upload = multer({
   dest: 'uploads/',
