@@ -2,4 +2,4 @@ User-agent: *
 Disallow: /admin/
 Allow: /
 
-Sitemap: https://4555221c-4ab6-4642-bf67-189ac600d628-00-2t8khqm5yn2rh.kirk.replit.dev/sitemap.xml
+Sitemap: https://flexiconvert.onrender.com/sitemap.xml

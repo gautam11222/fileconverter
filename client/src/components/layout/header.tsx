@@ -11,7 +11,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useTheme } from '@/hooks/use-theme';
 import { Menu, ArrowRightLeft, Sun, Moon } from 'lucide-react';
-import AdBanner from '@/components/common/ad-banner'; // ✅ Correct default import
+import AdBanner from '@/components/common/ad-banner'; // ✅ AdBanner component
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
@@ -22,32 +22,22 @@ export function Header() {
       <div className="container mx-auto px-4 py-3">
         <div className="flex h-14 items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Link href="/" className="flex items-center space-x-2" data-testid="link-home">
+            <Link href="/" className="flex items-center space-x-2">
               <ArrowRightLeft className="h-8 w-8 text-primary" />
               <span className="font-bold text-xl">FileConverter</span>
             </Link>
           </div>
           
-          {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-6">
-            <Link href="/" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors" data-testid="link-home-nav">
-              Home
-            </Link>
-            <Link href="/tools" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors" data-testid="link-tools">
-              Tools
-            </Link>
-            <Link href="/about" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors" data-testid="link-about">
-              About
-            </Link>
-            <Link href="/contact" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors" data-testid="link-contact">
-              Contact
-            </Link>
+            <Link href="/" className="text-sm font-medium text-foreground/80 hover:text-foreground">Home</Link>
+            <Link href="/tools" className="text-sm font-medium text-foreground/80 hover:text-foreground">Tools</Link>
+            <Link href="/about" className="text-sm font-medium text-foreground/80 hover:text-foreground">About</Link>
+            <Link href="/contact" className="text-sm font-medium text-foreground/80 hover:text-foreground">Contact</Link>
           </nav>
           
           <div className="flex items-center space-x-4">
-            {/* Language Selector */}
             <Select value={language} onValueChange={setLanguage}>
-              <SelectTrigger className="w-16" data-testid="select-language">
+              <SelectTrigger className="w-16">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -57,44 +47,32 @@ export function Header() {
                 <SelectItem value="de">DE</SelectItem>
               </SelectContent>
             </Select>
-            
-            {/* Dark Mode Toggle */}
-            <Button variant="ghost" size="icon" onClick={toggleTheme} data-testid="button-theme-toggle">
+
+            <Button variant="ghost" size="icon" onClick={toggleTheme}>
               {theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
             </Button>
-            
-            {/* Mobile Menu */}
+
             <Sheet>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden" data-testid="button-mobile-menu">
+                <Button variant="ghost" size="icon" className="md:hidden">
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
               <SheetContent side="right" className="w-[300px]">
                 <nav className="flex flex-col space-y-4 mt-4">
-                  <Link href="/" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors" data-testid="link-mobile-home">
-                    Home
-                  </Link>
-                  <Link href="/tools" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors" data-testid="link-mobile-tools">
-                    Tools
-                  </Link>
-                  <Link href="/about" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors" data-testid="link-mobile-about">
-                    About
-                  </Link>
-                  <Link href="/contact" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors" data-testid="link-mobile-contact">
-                    Contact
-                  </Link>
+                  <Link href="/">Home</Link>
+                  <Link href="/tools">Tools</Link>
+                  <Link href="/about">About</Link>
+                  <Link href="/contact">Contact</Link>
                 </nav>
               </SheetContent>
             </Sheet>
           </div>
         </div>
       </div>
-      
-      {/* Top Ad Banner - DISABLED: Replace with real slot ID */}
-      {/* <div className="container mx-auto px-4 py-2">
-        <AdBanner slot="REPLACE_WITH_REAL_SLOT_ID" format="auto" className="block w-full" data-testid="ad-header" />
-      </div> */}
+
+      {/* Top Header Ad */}
+      <AdBanner slot="4397713188" />
     </header>
   );
 }
