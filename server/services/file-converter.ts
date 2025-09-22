@@ -6,7 +6,7 @@ import { exec, spawn } from 'child_process';
 import yazl from 'yazl';
 import yauzl from 'yauzl';
 import LibreOffice from 'libreoffice-convert';
-import pdfParse from 'pdf-parse';
+import pdfParse from 'pdf-parse-new';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
 
 const execAsync = promisify(exec);
