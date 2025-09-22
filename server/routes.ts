@@ -1,3 +1,4 @@
+// routes.ts
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
@@ -5,18 +6,19 @@ import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
 import { storage } from "./storage";
+import FileConverterService, { ConversionOptions } from "./File-converter-service";
 
-// Configure multer for file uploads
 const upload = multer({
   dest: 'uploads/',
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB limit
+    fileSize: 200 * 1024 * 1024, // 200MB (matches service)
   },
   fileFilter: (req, file, cb) => {
-    // Allow all file types for now
     cb(null, true);
   },
 });
+
+const converter = new FileConverterService();
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // File conversion endpoint
@@ -26,8 +28,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'No file uploaded' });
       }
 
-      const { targetFormat, quality = 'medium', compress = 'false', emailResult = 'false' } = req.body;
-      
+      const {
+        targetFormat,
+        quality = 'medium',
+        compress = 'false',
+        emailResult = 'false',
+        ocrEnabled = 'false',
+        tableExtraction = 'false'
+      } = req.body;
+
       if (!targetFormat) {
         return res.status(400).json({ error: 'Target format is required' });
       }
@@ -37,7 +46,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const originalFormat = path.extname(originalFileName).substring(1).toLowerCase();
       const fileSize = req.file.size;
 
-      // Create conversion record
+      // Create conversion record in storage
       const conversion = await storage.createConversion({
         sessionId,
         originalFileName,
@@ -51,56 +60,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
           compress: compress === 'true',
           emailResult: emailResult === 'true',
           uploadPath: req.file.path,
+          ocrEnabled: ocrEnabled === 'true',
+          tableExtraction: tableExtraction === 'true'
         },
       });
 
-      // Store file info for async processing
-      const uploadedFile = req.file;
-      
-      // In a real implementation, this would trigger actual file conversion
-      // For now, we'll simulate the conversion process
-      setTimeout(async () => {
+      // Kick off conversion in background (non-blocking)
+      (async () => {
+        const uploadedPath = req.file.path;
+        const opts: ConversionOptions = {
+          quality: (quality as 'low' | 'medium' | 'high') || 'medium',
+          compress: compress === 'true',
+          preserveFormatting: true,
+          ocrEnabled: ocrEnabled === 'true',
+          tableExtraction: tableExtraction === 'true'
+        };
+
         try {
-          // Simulate conversion by copying the file with new extension
-          const convertedFileName = `${path.parse(originalFileName).name}.${targetFormat}`;
-          const downloadPath = `downloads/${randomUUID()}_${convertedFileName}`;
-          const fullDownloadPath = path.join(process.cwd(), downloadPath);
-          
-          // Ensure downloads directory exists
-          const downloadsDir = path.dirname(fullDownloadPath);
-          if (!fs.existsSync(downloadsDir)) {
-            fs.mkdirSync(downloadsDir, { recursive: true });
+          const lowerTarget = targetFormat.startsWith('.') ? targetFormat.slice(1) : targetFormat;
+          const ext = lowerTarget.toLowerCase();
+          let result;
+
+          // Choose appropriate conversion function based on target type
+          if (['docx', 'doc', 'pdf', 'txt', 'html', 'md', 'odt', 'rtf', 'xlsx', 'csv'].includes(ext)) {
+            // Document conversion pipeline
+            result = await converter.convertDocument(uploadedPath, `.${ext}`, opts);
+          } else if (['jpg', 'jpeg', 'png', 'webp', 'avif', 'tiff'].includes(ext)) {
+            // Image conversion
+            result = await converter.convertImage(uploadedPath, ext as any, opts);
+          } else if (['mp4', 'avi', 'mkv', 'webm', 'mov'].includes(ext)) {
+            // Video conversion
+            result = await converter.convertVideo(uploadedPath, ext as any, opts);
+          } else if (['mp3', 'aac', 'ogg', 'wav', 'flac', 'm4a'].includes(ext)) {
+            // Audio conversion
+            result = await converter.convertAudio(uploadedPath, ext as any, opts);
+          } else {
+            // Fallback: try document conversion via LibreOffice
+            result = await converter.convertDocument(uploadedPath, `.${ext}`, opts);
           }
 
-          // Copy file to downloads directory (simulating conversion)
-          if (uploadedFile) {
-            fs.copyFileSync(uploadedFile.path, fullDownloadPath);
+          // Move or copy converted file to downloads/ with an id-based name
+          const downloadsDir = path.join(process.cwd(), 'downloads');
+          if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true });
+
+          const outFileName = `${conversion.id}_${path.basename(result.outputPath)}`;
+          const destPath = path.join(downloadsDir, outFileName);
+
+          // move or copy (some conversions produce file inside converted/; prefer copying)
+          try {
+            fs.copyFileSync(result.outputPath, destPath);
+          } catch (copyErr) {
+            // fallback to rename if copy fails
+            try { fs.renameSync(result.outputPath, destPath); } catch (renameErr) { /* ignore */ }
           }
-          
-          // Update conversion status
+
+          const publicPath = `downloads/${outFileName}`;
+
+          // Update conversion record as completed
           await storage.updateConversion(conversion.id, {
             status: 'completed',
-            downloadPath: downloadPath,
+            downloadPath: publicPath,
             completedAt: new Date(),
+            warnings: result.warnings || [],
+            convertedSize: result.convertedSize
           });
 
-          // Clean up uploaded file
-          if (uploadedFile) {
-            fs.unlinkSync(uploadedFile.path);
-          }
-        } catch (error) {
-          console.error('Conversion failed:', error);
+        } catch (convErr) {
+          console.error(`Conversion failed for id=${conversion.id}:`, convErr);
           await storage.updateConversion(conversion.id, {
             status: 'failed',
             completedAt: new Date(),
+            errorMessage: (convErr as any)?.message || String(convErr)
           });
+        } finally {
+          // remove uploaded file to free space (if exists)
+          try {
+            if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+          } catch (e) { /* ignore */ }
         }
-      }, 2000); // Simulate 2-second conversion time
+      })();
 
+      // Respond immediately with processing status and id
       res.json({
         conversionId: conversion.id,
         status: 'processing',
-        message: 'File uploaded successfully. Conversion in progress.',
+        message: 'File uploaded successfully. Conversion started.'
       });
 
     } catch (error) {
@@ -113,7 +157,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/conversion/:id', async (req, res) => {
     try {
       const conversion = await storage.getConversion(req.params.id);
-      
+
       if (!conversion) {
         return res.status(404).json({ error: 'Conversion not found' });
       }
@@ -127,6 +171,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fileName: convertedFileName,
           originalFileName: conversion.originalFileName,
           targetFormat: conversion.targetFormat,
+          completedAt: conversion.completedAt,
+          warnings: conversion.warnings || []
         });
       } else {
         res.json({
@@ -134,6 +180,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: conversion.status,
           originalFileName: conversion.originalFileName,
           targetFormat: conversion.targetFormat,
+          errorMessage: conversion.errorMessage || undefined
         });
       }
     } catch (error) {
@@ -146,34 +193,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/download/:id', async (req, res) => {
     try {
       const conversion = await storage.getConversion(req.params.id);
-      
+
       if (!conversion || conversion.status !== 'completed' || !conversion.downloadPath) {
         return res.status(404).json({ error: 'File not found or not ready' });
       }
 
       const filePath = path.join(process.cwd(), conversion.downloadPath);
-      
+
       if (!fs.existsSync(filePath)) {
         return res.status(404).json({ error: 'File not found' });
       }
 
       const convertedFileName = `${path.parse(conversion.originalFileName).name}.${conversion.targetFormat}`;
-      
+
       res.setHeader('Content-Disposition', `attachment; filename="${convertedFileName}"`);
       res.setHeader('Content-Type', 'application/octet-stream');
-      
+
       const fileStream = fs.createReadStream(filePath);
       fileStream.pipe(res);
 
-      // Clean up file after download
+      // Optional: remove file after a delay to free disk space
       fileStream.on('end', () => {
         setTimeout(() => {
           try {
-            fs.unlinkSync(filePath);
+            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+            // also update storage to indicate file was cleaned up (optional)
+            storage.updateConversion(conversion.id, { downloadPath: null }).catch(() => {});
           } catch (error) {
             console.error('Failed to delete file:', error);
           }
-        }, 1000); // Delete after 1 second to ensure download completed
+        }, 60 * 1000); // delete after 60s
       });
 
     } catch (error) {
@@ -182,7 +231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Contact form endpoint
+  // Contact form endpoint (unchanged)
   app.post('/api/contact', async (req, res) => {
     try {
       const { name, email, subject, category, message } = req.body;
@@ -191,7 +240,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Required fields are missing' });
       }
 
-      // In a real implementation, this would send an email or save to database
       console.log('Contact form submission:', {
         name,
         email,
@@ -201,9 +249,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date().toISOString(),
       });
 
-      res.json({ 
-        success: true, 
-        message: 'Message sent successfully' 
+      res.json({
+        success: true,
+        message: 'Message sent successfully'
       });
 
     } catch (error) {
@@ -217,7 +265,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const sessionId = (req as any).sessionID || '';
       const conversions = await storage.getConversionsBySession(sessionId);
-      
+
       res.json(conversions.map(conversion => ({
         id: conversion.id,
         originalFileName: conversion.originalFileName,
@@ -234,28 +282,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Cleanup old files (run periodically)
+  // Background cleanup of old uploads/downloads (hourly)
   const cleanupOldFiles = () => {
     const uploadsDir = path.join(process.cwd(), 'uploads');
     const downloadsDir = path.join(process.cwd(), 'downloads');
-    
+
     const cleanupDirectory = (dir: string) => {
       if (!fs.existsSync(dir)) return;
-      
+
       const files = fs.readdirSync(dir);
       const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
-      
+
       files.forEach(file => {
         const filePath = path.join(dir, file);
-        const stats = fs.statSync(filePath);
-        
-        if (stats.mtime.getTime() < oneDayAgo) {
-          try {
+        try {
+          const stats = fs.statSync(filePath);
+          if (stats.mtime.getTime() < oneDayAgo) {
             fs.unlinkSync(filePath);
             console.log(`Cleaned up old file: ${filePath}`);
-          } catch (error) {
-            console.error(`Failed to cleanup file ${filePath}:`, error);
           }
+        } catch (err) {
+          console.error(`Failed to cleanup file ${filePath}:`, err);
         }
       });
     };
@@ -264,7 +311,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     cleanupDirectory(downloadsDir);
   };
 
-  // Run cleanup every hour
   setInterval(cleanupOldFiles, 60 * 60 * 1000);
 
   const httpServer = createServer(app);
