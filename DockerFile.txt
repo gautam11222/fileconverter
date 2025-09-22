@@ -1,5 +1,5 @@
-# Use official Node.js image
-FROM node:24.8.0-slim
+# Use Node base image
+FROM node:24-bullseye
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -8,32 +8,31 @@ RUN apt-get update && apt-get install -y \
     poppler-utils \
     tesseract-ocr \
     python3 \
+    python3-venv \
     python3-pip \
     fonts-dejavu-core \
     fonts-liberation \
-    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python packages
-RUN pip3 install pdf2docx camelot-py[cv] pandas
+# Create Python virtual environment
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Upgrade pip inside venv
+RUN pip install --upgrade pip
+
+# Install Python packages inside venv
+RUN pip install pdf2docx camelot-py[cv] pandas
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-
-# Install Node dependencies
-RUN npm install --production
-
-# Copy the rest of your code
+# Copy project files
 COPY . .
 
-# Build your project
+# Install Node dependencies
+RUN npm install
 RUN npm run build
-
-# Expose port
-EXPOSE 10000
 
 # Start the app
 CMD ["npm", "start"]
