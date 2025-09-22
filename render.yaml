@@ -1,7 +1,11 @@
+# Exported from Render on 2025-09-22T19:56:13Z
+version: "1"
 services:
   - type: web
-    name: file-converter
-    env: docker
+    name: FlexiConvert
+    env: docker        # <-- changed from 'runtime: node' to 'env: docker'
+    repo: https://github.com/gautam11222/fileconverter
     plan: free
-    dockerfilePath: DockerFile
-    autoDeploy: true
+    region: singapore
+    dockerfilePath: ./Dockerfile   # <-- points to your Dockerfile
+    autoDeploy: true               # <-- auto deploy on git push

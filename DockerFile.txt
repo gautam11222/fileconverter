@@ -1,5 +1,5 @@
-# Use Node 22 on Debian Bullseye
-FROM node:22-bullseye
+# Use official Node.js image
+FROM node:24.8.0-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -24,15 +24,15 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install Node dependencies
-RUN npm install --legacy-peer-deps
+RUN npm install --production
 
-# Copy the rest of the project
+# Copy the rest of your code
 COPY . .
 
-# Build the project
+# Build your project
 RUN npm run build
 
-# Expose port 10000 (Render default or your app port)
+# Expose port
 EXPOSE 10000
 
 # Start the app
