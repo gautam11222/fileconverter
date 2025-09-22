@@ -1,0 +1,52 @@
+# ================= NODE + LIBREOFFICE + PYTHON ENV =================
+FROM node:24-bullseye
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    libreoffice \
+    libreoffice-writer \
+    libreoffice-calc \
+    libreoffice-impress \
+    libreoffice-l10n-en \
+    libreoffice-pdfimport \
+    ffmpeg \
+    poppler-utils \
+    tesseract-ocr \
+    imagemagick \
+    python3 \
+    python3-venv \
+    python3-pip \
+    fonts-dejavu-core \
+    fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+
+# ================= PYTHON VENV =================
+# Create Python virtual environment
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Upgrade pip inside virtualenv
+RUN pip install --upgrade pip
+
+# Install Python packages inside virtualenv
+RUN pip install pdf2docx camelot-py[cv] pandas
+
+# ================= NODE APP =================
+# Set working directory
+WORKDIR /app
+
+# Copy package.json files and install dependencies
+COPY package*.json ./
+RUN npm install
+
+# Copy all project files
+COPY . .
+
+# Build the Node project
+RUN npm run build
+
+# Expose the port your Express server uses
+EXPOSE 10000
+
+# Start the app
+CMD ["npm", "start"]
