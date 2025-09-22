@@ -57,7 +57,7 @@ export class FileConverterService {
     options: ConversionOptions = { quality: 'medium', compress: false }
   ): Promise<ConversionResult> {
     if (!fs.existsSync(inputPath)) throw new Error(`Input file not found: ${inputPath}`);
-
+    inputPath = path.resolve(inputPath); // Ensure absolute path
     const startTime = Date.now();
     const inputExt = path.extname(inputPath).toLowerCase();
     const outputExt = outputFormat.startsWith('.') ? outputFormat : `.${outputFormat}`;
@@ -122,15 +122,25 @@ export class FileConverterService {
     }
   }
 
+  // ===================== PDF UTILITIES =====================
   private async isPdfScanned(inputPath: string): Promise<boolean> {
     try {
-      if (!fs.existsSync(inputPath)) return true;
-      const dataBuffer = fs.readFileSync(inputPath);
-      const data = await pdfParse(dataBuffer);
-      const text = (data.text || '').replace(/\s+/g, ' ').trim();
+      const text = await this.safePdfParse(inputPath);
       return text.length < 200;
     } catch {
       return true;
+    }
+  }
+
+  private async safePdfParse(inputPath: string): Promise<string> {
+    if (!fs.existsSync(inputPath)) throw new Error(`File not found: ${inputPath}`);
+    try {
+      const buffer = fs.readFileSync(inputPath);
+      const data = await pdfParse(buffer);
+      return (data.text || '').replace(/\s+/g, ' ').trim();
+    } catch (err) {
+      console.error('PDF parse error:', err);
+      return '';
     }
   }
 
@@ -218,6 +228,11 @@ cv.close()
 
   private async isCliAvailable(cmd: string): Promise<boolean> {
     try { await execAsync(`${cmd} --version`, { timeout: 4000 }); return true; } catch { return false; }
+  }
+
+  // Placeholder for future table extraction
+  private async extractTablesUsingCamelot(inputPath: string): Promise<string | null> {
+    return null; // implement table extraction if needed
   }
 }
 
