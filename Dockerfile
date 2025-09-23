@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y \
     libreoffice-writer \
     libreoffice-calc \
     libreoffice-impress \
+    libreoffice-draw \        # add this
+    unoconv \ 
     ffmpeg \
     poppler-utils \
     tesseract-ocr \
@@ -40,4 +42,4 @@ RUN npm install
 RUN npm run build
 
 # Start the app
-CMD ["npm", "start"] give fully updated docker file 
+CMD ["npm", "start"]
