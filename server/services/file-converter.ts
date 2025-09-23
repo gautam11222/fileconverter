@@ -1,24 +1,24 @@
 import sharp from 'sharp';
+import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import yazl from 'yazl';
 import yauzl from 'yauzl';
 import LibreOffice from 'libreoffice-convert';
 import pdfParse from 'pdf-parse-new';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
-import { promisify } from 'util';
 
 const execAsync = promisify(exec);
-const libreOfficeConvert = LibreOffice.convert; // already async, no promisify needed
+const libreOfficeConvert = promisify(LibreOffice.convert);
 
 export interface ConversionOptions {
   quality: 'low' | 'medium' | 'high';
   compress: boolean;
   metadata?: Record<string, any>;
   preserveFormatting?: boolean;
-  ocrEnabled?: boolean;
-  tableExtraction?: boolean;
+  ocrEnabled?: boolean; // force OCR on scanned PDFs
+  tableExtraction?: boolean; // optional table extraction
 }
 
 export interface ConversionResult {
@@ -57,7 +57,7 @@ export class FileConverterService {
     options: ConversionOptions = { quality: 'medium', compress: false }
   ): Promise<ConversionResult> {
     if (!fs.existsSync(inputPath)) throw new Error(`Input file not found: ${inputPath}`);
-    inputPath = path.resolve(inputPath);
+    inputPath = path.resolve(inputPath); // Ensure absolute path
     const startTime = Date.now();
     const inputExt = path.extname(inputPath).toLowerCase();
     const outputExt = outputFormat.startsWith('.') ? outputFormat : `.${outputFormat}`;
@@ -80,9 +80,39 @@ export class FileConverterService {
             warnings.push('pdf2docx failed, falling back to LibreOffice');
           }
         }
+
+        if (isScanned || options.ocrEnabled) {
+          if (await this.isCliAvailable('tesseract')) {
+            const ocrText = await this.runTesseractOCR(inputPath);
+            if (outputExt.toLowerCase() === '.docx') {
+              await this.createDocxFromText(ocrText, finalOutputPath);
+            } else if (outputExt.toLowerCase() === '.txt') {
+              fs.writeFileSync(finalOutputPath, ocrText, 'utf8');
+            }
+            const result = await this.buildConversionResult(inputPath, finalOutputPath, startTime, warnings);
+            result.url = `/api/download/${path.basename(finalOutputPath)}`;
+            return result;
+          } else {
+            warnings.push('Tesseract not available; OCR skipped');
+          }
+        }
+
+        if (options.tableExtraction && ['.csv', '.xlsx'].includes(outputExt.toLowerCase())) {
+          try {
+            const tablePath = await this.extractTablesUsingCamelot(inputPath);
+            if (tablePath) {
+              fs.copyFileSync(tablePath, finalOutputPath);
+              const result = await this.buildConversionResult(inputPath, finalOutputPath, startTime, warnings);
+              result.url = `/api/download/${path.basename(finalOutputPath)}`;
+              return result;
+            }
+          } catch (err: any) {
+            warnings.push('Table extraction failed');
+          }
+        }
       }
 
-      // fallback: LibreOffice
+      // fallback to LibreOffice
       const processedPath = await this.convertWithLibreOffice(inputPath, outputExt, options);
       const result = await this.buildConversionResult(inputPath, processedPath, startTime, warnings);
       result.url = `/api/download/${path.basename(processedPath)}`;
@@ -108,8 +138,38 @@ export class FileConverterService {
       const buffer = fs.readFileSync(inputPath);
       const data = await pdfParse(buffer);
       return (data.text || '').replace(/\s+/g, ' ').trim();
-    } catch {
+    } catch (err) {
+      console.error('PDF parse error:', err);
       return '';
+    }
+  }
+
+  private async runTesseractOCR(inputPath: string): Promise<string> {
+    const imagesDir = path.join(FileConverterService.TEMP_DIR, `ocr_${Date.now()}`);
+    fs.mkdirSync(imagesDir, { recursive: true });
+
+    try {
+      if (await this.isCliAvailable('pdftoppm')) {
+        await execAsync(`pdftoppm -png "${inputPath}" "${path.join(imagesDir, 'page')}"`, { timeout: FileConverterService.TIMEOUT });
+      } else if (await this.isCliAvailable('magick')) {
+        await execAsync(`magick -density 300 "${inputPath}" "${path.join(imagesDir, 'page')}.png"`, { timeout: FileConverterService.TIMEOUT });
+      } else {
+        throw new Error('No PDF->image renderer available (pdftoppm or ImageMagick required)');
+      }
+
+      const images = fs.readdirSync(imagesDir).map(f => path.join(imagesDir, f)).filter(f => f.endsWith('.png'));
+      let aggregatedText = '';
+
+      for (const img of images) {
+        const txtOut = `${img}.txt`;
+        await execAsync(`tesseract "${img}" "${img}"`, { timeout: FileConverterService.TIMEOUT });
+        aggregatedText += fs.readFileSync(txtOut, 'utf8') + '\n\n';
+        fs.unlinkSync(txtOut);
+      }
+      return aggregatedText.trim();
+    } finally {
+      fs.readdirSync(imagesDir).forEach(f => fs.unlinkSync(path.join(imagesDir, f)));
+      fs.rmdirSync(imagesDir);
     }
   }
 
@@ -142,25 +202,9 @@ cv.close()
   }
 
   private async convertWithLibreOffice(inputPath: string, outputExt: string, _options: ConversionOptions) {
-    const outputPath = path.join(
-      FileConverterService.CONVERTED_DIR,
-      `${path.basename(inputPath, path.extname(inputPath))}_${Date.now()}${outputExt}`
-    );
-
+    const outputPath = path.join(FileConverterService.CONVERTED_DIR, `${path.basename(inputPath, path.extname(inputPath))}_${Date.now()}${outputExt}`);
     const inputBuffer = fs.readFileSync(inputPath);
-
-    // Explicit export filters
-    const formatMap: Record<string, string> = {
-      '.pdf': 'pdf:writer_pdf_Export',
-      '.docx': 'docx:MS Word 2007 XML',
-      '.odt': 'odt',
-      '.txt': 'txt:Text',
-      '.rtf': 'rtf:Rich Text Format',
-      '.html': 'html:XHTML Writer File'
-    };
-
-    const format = formatMap[outputExt.toLowerCase()] || outputExt.replace('.', '');
-
+    const format = outputExt.replace('.', '');
     const convertedBuffer = await libreOfficeConvert(inputBuffer, format, undefined);
     fs.writeFileSync(outputPath, convertedBuffer);
     return outputPath;
@@ -180,6 +224,15 @@ cv.close()
   private ensureDirectories() {
     [FileConverterService.UPLOAD_DIR, FileConverterService.TEMP_DIR, FileConverterService.CONVERTED_DIR]
       .forEach(dir => { if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); });
+  }
+
+  private async isCliAvailable(cmd: string): Promise<boolean> {
+    try { await execAsync(`${cmd} --version`, { timeout: 4000 }); return true; } catch { return false; }
+  }
+
+  // Placeholder for future table extraction
+  private async extractTablesUsingCamelot(inputPath: string): Promise<string | null> {
+    return null; // implement table extraction if needed
   }
 }
 
