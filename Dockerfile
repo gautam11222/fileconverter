@@ -14,12 +14,16 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     poppler-utils \
     tesseract-ocr \
+    tesseract-ocr-eng \
+    ghostscript \
     python3 \
     python3-venv \
     python3-pip \
     python3-dev \
+    libgl1 \
     fonts-dejavu-core \
     fonts-liberation \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 # Create Python virtual environment
 RUN python3 -m venv /opt/venv
