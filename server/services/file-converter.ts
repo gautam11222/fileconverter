@@ -181,10 +181,11 @@ export class FileConverterService {
     try { execSync(`${pythonBin} -c "import pdf2docx"`); } catch { pythonBin = 'python'; }
     try { execSync(`${pythonBin} -c "import pdf2docx"`); } catch { throw new Error('pdf2docx not installed'); }
 
+    const escWin = (p: string) => p.replace(/\\/g, '\\\\');
     const script = `
 from pdf2docx import Converter
-cv = Converter(r"${inputPath.replace(/\\/g, '\\\\')}")
-cv.convert(r"${outputPath.replace(/\\/g, '\\\\')}", start=0, end=None)
+cv = Converter(r"${escWin(inputPath)}")
+cv.convert(r"${escWin(outputPath)}", start=0, end=None)
 cv.close()
 `;
     const tempScript = path.join(FileConverterService.TEMP_DIR, `pdf2docx_${Date.now()}.py`);
@@ -205,20 +206,42 @@ cv.close()
     );
     const inputBuffer = fs.readFileSync(inputPath);
 
+    // Base export filters for formats that typically require a named filter
     const exportFilters: Record<string, string> = {
       docx: 'MS Word 2007 XML',
       xlsx: 'Calc MS Excel 2007 XML',
-      pdf: 'writer_pdf_Export',
-      pptx: 'Impress MS PowerPoint 2007 XML'
+      pptx: 'Impress MS PowerPoint 2007 XML',
+      // For PDF we will choose based on input type below
     };
 
-    // Ensure filter is always a string
-    const filter: string = exportFilters[format] ?? '';
+    // Determine PDF filter by source app where useful
+    const inputExt = path.extname(inputPath).toLowerCase();
+    const pdfFilterByInput: Record<string, string> = {
+      '.odt': 'writer_pdf_Export',
+      '.doc': 'writer_pdf_Export',
+      '.docx': 'writer_pdf_Export',
+      '.rtf': 'writer_pdf_Export',
+      '.txt': 'writer_pdf_Export',
+      '.md': 'writer_pdf_Export',
+      '.ods': 'calc_pdf_Export',
+      '.xls': 'calc_pdf_Export',
+      '.xlsx': 'calc_pdf_Export',
+      '.odp': 'impress_pdf_Export',
+      '.ppt': 'impress_pdf_Export',
+      '.pptx': 'impress_pdf_Export',
+      '.odg': 'draw_pdf_Export'
+    };
 
+    let filterStr: string | undefined = exportFilters[format];
+    if (format === 'pdf') {
+      filterStr = pdfFilterByInput[inputExt] ?? undefined;
+    }
+
+    // Call libreoffice-convert with a string or undefined (NOT an object)
     const convertedBuffer: Buffer = await new Promise((resolve, reject) => {
-      LibreOffice.convert(inputBuffer, format, { filter }, (err, done) => {
+      LibreOffice.convert(inputBuffer, format, filterStr, (err, done) => {
         if (err) reject(err);
-        else resolve(done);
+        else resolve(done as Buffer);
       });
     });
 
