@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     libreoffice-writer \
     libreoffice-calc \
     libreoffice-impress \
-    libreoffice-draw \        # add this
+    libreoffice-draw \       
     unoconv \ 
     ffmpeg \
     poppler-utils \
