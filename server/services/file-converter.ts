@@ -1,24 +1,18 @@
 import sharp from 'sharp';
-import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec, spawn } from 'child_process';
-import yazl from 'yazl';
-import yauzl from 'yauzl';
+import { exec, execSync } from 'child_process';
 import LibreOffice from 'libreoffice-convert';
 import pdfParse from 'pdf-parse-new';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
-
-const execAsync = promisify(exec);
-const libreOfficeConvert = promisify(LibreOffice.convert);
 
 export interface ConversionOptions {
   quality: 'low' | 'medium' | 'high';
   compress: boolean;
   metadata?: Record<string, any>;
   preserveFormatting?: boolean;
-  ocrEnabled?: boolean; // force OCR on scanned PDFs
-  tableExtraction?: boolean; // optional table extraction
+  ocrEnabled?: boolean;
+  tableExtraction?: boolean;
 }
 
 export interface ConversionResult {
@@ -34,8 +28,8 @@ export class FileConverterService {
   private static readonly UPLOAD_DIR = path.join(process.cwd(), 'uploads');
   private static readonly TEMP_DIR = path.join(process.cwd(), 'temp');
   private static readonly CONVERTED_DIR = path.join(process.cwd(), 'converted');
-  private static readonly MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
-  private static readonly TIMEOUT = 8 * 60 * 1000; // 8 minutes
+  private static readonly MAX_FILE_SIZE = 200 * 1024 * 1024;
+  private static readonly TIMEOUT = 8 * 60 * 1000;
 
   constructor() {
     this.ensureDirectories();
@@ -57,13 +51,12 @@ export class FileConverterService {
     options: ConversionOptions = { quality: 'medium', compress: false }
   ): Promise<ConversionResult> {
     if (!fs.existsSync(inputPath)) throw new Error(`Input file not found: ${inputPath}`);
-    inputPath = path.resolve(inputPath); // Ensure absolute path
+    inputPath = path.resolve(inputPath);
     const startTime = Date.now();
     const inputExt = path.extname(inputPath).toLowerCase();
     const outputExt = outputFormat.startsWith('.') ? outputFormat : `.${outputFormat}`;
     const fileName = path.basename(inputPath, path.extname(inputPath));
     const finalOutputPath = path.join(FileConverterService.CONVERTED_DIR, `${fileName}_${Date.now()}${outputExt}`);
-
     const warnings: string[] = [];
 
     try {
@@ -72,11 +65,11 @@ export class FileConverterService {
 
         if (!isScanned && outputExt.toLowerCase() === '.docx') {
           try {
-            const processedPath = await this.convertPdfToDocxAdvanced(inputPath, finalOutputPath, options);
+            const processedPath = await this.convertPdfToDocxAdvanced(inputPath, finalOutputPath);
             const result = await this.buildConversionResult(inputPath, processedPath, startTime, warnings);
             result.url = `/api/download/${path.basename(processedPath)}`;
             return result;
-          } catch (err: any) {
+          } catch {
             warnings.push('pdf2docx failed, falling back to LibreOffice');
           }
         }
@@ -106,14 +99,14 @@ export class FileConverterService {
               result.url = `/api/download/${path.basename(finalOutputPath)}`;
               return result;
             }
-          } catch (err: any) {
+          } catch {
             warnings.push('Table extraction failed');
           }
         }
       }
 
       // fallback to LibreOffice
-      const processedPath = await this.convertWithLibreOffice(inputPath, outputExt, options);
+      const processedPath = await this.convertWithLibreOffice(inputPath, outputExt);
       const result = await this.buildConversionResult(inputPath, processedPath, startTime, warnings);
       result.url = `/api/download/${path.basename(processedPath)}`;
       return result;
@@ -147,29 +140,26 @@ export class FileConverterService {
   private async runTesseractOCR(inputPath: string): Promise<string> {
     const imagesDir = path.join(FileConverterService.TEMP_DIR, `ocr_${Date.now()}`);
     fs.mkdirSync(imagesDir, { recursive: true });
-
     try {
       if (await this.isCliAvailable('pdftoppm')) {
-        await execAsync(`pdftoppm -png "${inputPath}" "${path.join(imagesDir, 'page')}"`, { timeout: FileConverterService.TIMEOUT });
+        execSync(`pdftoppm -png "${inputPath}" "${path.join(imagesDir, 'page')}"`, { timeout: FileConverterService.TIMEOUT });
       } else if (await this.isCliAvailable('magick')) {
-        await execAsync(`magick -density 300 "${inputPath}" "${path.join(imagesDir, 'page')}.png"`, { timeout: FileConverterService.TIMEOUT });
+        execSync(`magick -density 300 "${inputPath}" "${path.join(imagesDir, 'page')}.png"`, { timeout: FileConverterService.TIMEOUT });
       } else {
         throw new Error('No PDF->image renderer available (pdftoppm or ImageMagick required)');
       }
 
       const images = fs.readdirSync(imagesDir).map(f => path.join(imagesDir, f)).filter(f => f.endsWith('.png'));
       let aggregatedText = '';
-
       for (const img of images) {
         const txtOut = `${img}.txt`;
-        await execAsync(`tesseract "${img}" "${img}"`, { timeout: FileConverterService.TIMEOUT });
+        execSync(`tesseract "${img}" "${img}"`, { timeout: FileConverterService.TIMEOUT });
         aggregatedText += fs.readFileSync(txtOut, 'utf8') + '\n\n';
         fs.unlinkSync(txtOut);
       }
       return aggregatedText.trim();
     } finally {
-      fs.readdirSync(imagesDir).forEach(f => fs.unlinkSync(path.join(imagesDir, f)));
-      fs.rmdirSync(imagesDir);
+      fs.rmSync(imagesDir, { recursive: true, force: true });
     }
   }
 
@@ -181,10 +171,10 @@ export class FileConverterService {
     fs.writeFileSync(outputPath, buffer);
   }
 
-  private async convertPdfToDocxAdvanced(inputPath: string, outputPath: string, _options: ConversionOptions) {
+  private async convertPdfToDocxAdvanced(inputPath: string, outputPath: string) {
     let pythonBin = 'python3';
-    try { await execAsync(`${pythonBin} -c "import pdf2docx"`); } catch { pythonBin = 'python'; }
-    try { await execAsync(`${pythonBin} -c "import pdf2docx"`); } catch { throw new Error('pdf2docx not installed'); }
+    try { execSync(`${pythonBin} -c "import pdf2docx"`); } catch { pythonBin = 'python'; }
+    try { execSync(`${pythonBin} -c "import pdf2docx"`); } catch { throw new Error('pdf2docx not installed'); }
 
     const script = `
 from pdf2docx import Converter
@@ -194,18 +184,24 @@ cv.close()
 `;
     const tempScript = path.join(FileConverterService.TEMP_DIR, `pdf2docx_${Date.now()}.py`);
     fs.writeFileSync(tempScript, script);
-
     try {
-      await execAsync(`${pythonBin} "${tempScript}"`, { timeout: FileConverterService.TIMEOUT });
+      execSync(`${pythonBin} "${tempScript}"`, { timeout: FileConverterService.TIMEOUT });
       return outputPath;
     } finally { fs.unlinkSync(tempScript); }
   }
 
-  private async convertWithLibreOffice(inputPath: string, outputExt: string, _options: ConversionOptions) {
-    const outputPath = path.join(FileConverterService.CONVERTED_DIR, `${path.basename(inputPath, path.extname(inputPath))}_${Date.now()}${outputExt}`);
+  private async convertWithLibreOffice(inputPath: string, outputExt: string) {
+    const format = outputExt.startsWith('.') ? outputExt.slice(1) : outputExt;
+    const outputPath = path.join(FileConverterService.CONVERTED_DIR, `${path.basename(inputPath, path.extname(inputPath))}_${Date.now()}.${format}`);
     const inputBuffer = fs.readFileSync(inputPath);
-    const format = outputExt.replace('.', '');
-    const convertedBuffer = await libreOfficeConvert(inputBuffer, format, undefined);
+
+    const convertedBuffer: Buffer = await new Promise((resolve, reject) => {
+      LibreOffice.convert(inputBuffer, format, undefined, (err, done) => {
+        if (err) reject(err);
+        else resolve(done);
+      });
+    });
+
     fs.writeFileSync(outputPath, convertedBuffer);
     return outputPath;
   }
@@ -227,12 +223,11 @@ cv.close()
   }
 
   private async isCliAvailable(cmd: string): Promise<boolean> {
-    try { await execAsync(`${cmd} --version`, { timeout: 4000 }); return true; } catch { return false; }
+    try { execSync(`${cmd} --version`, { stdio: 'ignore', timeout: 4000 }); return true; } catch { return false; }
   }
 
-  // Placeholder for future table extraction
   private async extractTablesUsingCamelot(inputPath: string): Promise<string | null> {
-    return null; // implement table extraction if needed
+    return null; // Implement table extraction if needed
   }
 }
 
