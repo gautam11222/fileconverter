@@ -1,7 +1,7 @@
 import sharp from 'sharp';
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec, execSync } from 'child_process';
+import { execSync } from 'child_process';
 import LibreOffice from 'libreoffice-convert';
 import pdfParse from 'pdf-parse-new';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
@@ -28,8 +28,8 @@ export class FileConverterService {
   private static readonly UPLOAD_DIR = path.join(process.cwd(), 'uploads');
   private static readonly TEMP_DIR = path.join(process.cwd(), 'temp');
   private static readonly CONVERTED_DIR = path.join(process.cwd(), 'converted');
-  private static readonly MAX_FILE_SIZE = 200 * 1024 * 1024;
-  private static readonly TIMEOUT = 8 * 60 * 1000;
+  private static readonly MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
+  private static readonly TIMEOUT = 8 * 60 * 1000; // 8 minutes
 
   constructor() {
     this.ensureDirectories();
@@ -60,9 +60,11 @@ export class FileConverterService {
     const warnings: string[] = [];
 
     try {
+      // Handle PDF-specific logic
       if (inputExt === '.pdf') {
         const isScanned = await this.isPdfScanned(inputPath);
 
+        // PDF -> DOCX (text-based)
         if (!isScanned && outputExt.toLowerCase() === '.docx') {
           try {
             const processedPath = await this.convertPdfToDocxAdvanced(inputPath, finalOutputPath);
@@ -74,6 +76,7 @@ export class FileConverterService {
           }
         }
 
+        // OCR for scanned PDFs
         if (isScanned || options.ocrEnabled) {
           if (await this.isCliAvailable('tesseract')) {
             const ocrText = await this.runTesseractOCR(inputPath);
@@ -90,6 +93,7 @@ export class FileConverterService {
           }
         }
 
+        // Placeholder: table extraction (CSV/XLSX)
         if (options.tableExtraction && ['.csv', '.xlsx'].includes(outputExt.toLowerCase())) {
           try {
             const tablePath = await this.extractTablesUsingCamelot(inputPath);
@@ -105,11 +109,12 @@ export class FileConverterService {
         }
       }
 
-      // fallback to LibreOffice
+      // Fallback: LibreOffice conversion for all other types
       const processedPath = await this.convertWithLibreOffice(inputPath, outputExt);
       const result = await this.buildConversionResult(inputPath, processedPath, startTime, warnings);
       result.url = `/api/download/${path.basename(processedPath)}`;
       return result;
+
     } catch (err: any) {
       throw new Error(`Document conversion failed: ${err.message || err}`);
     }
@@ -187,16 +192,30 @@ cv.close()
     try {
       execSync(`${pythonBin} "${tempScript}"`, { timeout: FileConverterService.TIMEOUT });
       return outputPath;
-    } finally { fs.unlinkSync(tempScript); }
+    } finally {
+      fs.unlinkSync(tempScript);
+    }
   }
 
   private async convertWithLibreOffice(inputPath: string, outputExt: string) {
     const format = outputExt.startsWith('.') ? outputExt.slice(1) : outputExt;
-    const outputPath = path.join(FileConverterService.CONVERTED_DIR, `${path.basename(inputPath, path.extname(inputPath))}_${Date.now()}.${format}`);
+    const outputPath = path.join(
+      FileConverterService.CONVERTED_DIR,
+      `${path.basename(inputPath, path.extname(inputPath))}_${Date.now()}.${format}`
+    );
     const inputBuffer = fs.readFileSync(inputPath);
 
+    const exportFilters: Record<string, string> = {
+      docx: 'MS Word 2007 XML',
+      xlsx: 'Calc MS Excel 2007 XML',
+      pdf: 'writer_pdf_Export',
+      pptx: 'Impress MS PowerPoint 2007 XML'
+    };
+
+    const filter = exportFilters[format] || undefined;
+
     const convertedBuffer: Buffer = await new Promise((resolve, reject) => {
-      LibreOffice.convert(inputBuffer, format, undefined, (err, done) => {
+      LibreOffice.convert(inputBuffer, format, { filter }, (err, done) => {
         if (err) reject(err);
         else resolve(done);
       });
@@ -227,7 +246,9 @@ cv.close()
   }
 
   private async extractTablesUsingCamelot(inputPath: string): Promise<string | null> {
-    return null; // Implement table extraction if needed
+    // Placeholder for Camelot table extraction
+    // Implement: extract tables and return path to CSV/XLSX
+    return null;
   }
 }
 
