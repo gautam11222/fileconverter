@@ -206,15 +206,7 @@ cv.close()
     );
     const inputBuffer = fs.readFileSync(inputPath);
 
-    // Base export filters for formats that typically require a named filter
-    const exportFilters: Record<string, string> = {
-      docx: 'MS Word 2007 XML',
-      xlsx: 'Calc MS Excel 2007 XML',
-      pptx: 'Impress MS PowerPoint 2007 XML',
-      // For PDF we will choose based on input type below
-    };
-
-    // Determine PDF filter by source app where useful
+    // Only keep safe, non-space PDF filters; let LO choose defaults for docx/xlsx/pptx
     const inputExt = path.extname(inputPath).toLowerCase();
     const pdfFilterByInput: Record<string, string> = {
       '.odt': 'writer_pdf_Export',
@@ -232,12 +224,16 @@ cv.close()
       '.odg': 'draw_pdf_Export'
     };
 
-    let filterStr: string | undefined = exportFilters[format];
+    let filterStr: string | undefined = undefined;
     if (format === 'pdf') {
       filterStr = pdfFilterByInput[inputExt] ?? undefined;
     }
 
-    // Call libreoffice-convert with a string or undefined (NOT an object)
+    // Guard: avoid passing any filter containing whitespace to prevent quoting/extension issues
+    if (typeof filterStr === 'string' && /\s/.test(filterStr)) {
+      filterStr = undefined;
+    }
+
     const convertedBuffer: Buffer = await new Promise((resolve, reject) => {
       LibreOffice.convert(inputBuffer, format, filterStr, (err, done) => {
         if (err) reject(err);
