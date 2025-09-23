@@ -212,7 +212,8 @@ cv.close()
       pptx: 'Impress MS PowerPoint 2007 XML'
     };
 
-    const filter = exportFilters[format] || undefined;
+    // Ensure filter is always a string
+    const filter: string = exportFilters[format] ?? '';
 
     const convertedBuffer: Buffer = await new Promise((resolve, reject) => {
       LibreOffice.convert(inputBuffer, format, { filter }, (err, done) => {
